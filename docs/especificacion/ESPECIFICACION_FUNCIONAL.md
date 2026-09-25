@@ -767,7 +767,7 @@ Por la Ley 1581 (N-11), los ambientes no productivos usan **solo datos sintétic
 | P-15 | Umbrales de maker–checker (cambio de valor) y SLA por etapa y de liberación. | Negocio / Riesgo |
 | P-16 | Aprobadores formales de este documento. | Dirección del proyecto |
 | P-18 | ¿Se descompone la especificación en `specs/RF-xx/spec.md` en formato EARS (metodología de la fábrica IngenIA)? | Dirección del proyecto |
-| P-19 | Manual de marca oficial de Banco Popular (colores, tipografía, logos, iconografía). | Mercadeo |
+| P-19 | Manual de marca oficial de Banco Popular y archivos vectoriales del logotipo. Mientras llegan, rige el manual derivado de los sitios públicos (`garantias-frontend/docs/marca/MANUAL_DE_MARCA.md`). Falta la autorización de uso de la marca. | Mercadeo |
 | P-20 | Motor de reglas: ¿DMN embebido (propuesta) o una herramienta corporativa de reglas existente? | Arquitectura TI |
 | P-21 | Appian: ¿procesos ya existentes que se reutilizan? ¿Versión y mecanismo de integración (REST, conectores Kafka)? ¿El maker–checker de configuración y reglas vive en Garantías 360 (supuesto R-04)? | Arquitectura / BPM |
 | P-22 | OnBase: ¿API disponible para cargar y consultar, tipos documentales existentes para garantías, y posibilidad de guardar el hash como metadato? | ECM |
