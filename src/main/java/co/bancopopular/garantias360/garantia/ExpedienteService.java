@@ -101,7 +101,7 @@ public class ExpedienteService {
         Map<UUID, Map<String, Object>> r = new HashMap<>();
         jdbc.query("""
                         select v.garantia_id, count(*) as obligaciones, min(c.ratio) as ratio_minimo,
-                               sum(c.exposicion) as exposicion, sum(c.asignado) as asignado
+                               sum(c.exposicion) as exposicion, sum(c.brecha) as brecha
                         from vinculo_garantia_obligacion v left join cobertura_vigente c on c.obligacion_id = v.obligacion_id
                         where v.vigente and v.garantia_id = any(?::uuid[]) group by v.garantia_id""",
                 rs -> {
@@ -109,6 +109,7 @@ public class ExpedienteService {
                     m.put("obligaciones", rs.getInt("obligaciones"));
                     m.put("ratioMinimo", rs.getBigDecimal("ratio_minimo"));
                     m.put("exposicion", rs.getBigDecimal("exposicion"));
+                    m.put("brecha", rs.getBigDecimal("brecha"));
                     r.put((UUID) rs.getObject("garantia_id"), m);
                 }, "{" + String.join(",", ids.stream().map(UUID::toString).toList()) + "}");
         return r;

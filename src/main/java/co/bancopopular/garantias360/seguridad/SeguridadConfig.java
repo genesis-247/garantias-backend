@@ -70,7 +70,7 @@ public class SeguridadConfig {
     }
 
     @Bean
-    CorsConfigurationSource cors(@Value("${g360.cors.origenes:http://localhost:3000}") String origenes) {
+    CorsConfigurationSource corsConfigurationSource(@Value("${g360.cors.origenes:http://localhost:3000}") String origenes) {
         CorsConfiguration c = new CorsConfiguration();
         c.setAllowedOrigins(Arrays.asList(origenes.split(",")));
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

@@ -98,7 +98,7 @@ public class TableroService {
                 new Indicador("GARANTIAS_ACTIVAS", "Garantías activas", BigDecimal.valueOf(activas), "CONTEO",
                         "Garantías en ACTIVA, MONITOREO, ACTUALIZACION o EJECUCION", null),
                 new Indicador("EXPOSICION_CUBIERTA", "Exposición cubierta", pct(d(c, "cubierta"), exposicion), "PORCENTAJE",
-                        "Σ min(asignado, exposición) ÷ Σ exposición", "Exposición total " + exposicion.toPlainString()),
+                        "Σ min(asignado, exposición) ÷ Σ exposición", "Exposición total " + pesos(exposicion)),
                 new Indicador("COBERTURA_IDONEA", "Cobertura idónea", pct(d(c, "idonea"), exposicion), "PORCENTAJE",
                         "Σ min(asignado por garantías idóneas, exposición) ÷ Σ exposición", null),
                 new Indicador("VALORACIONES_POR_VENCER", "Valoraciones próximas a vencer", BigDecimal.valueOf(n(g, "por_vencer")), "CONTEO",
@@ -127,11 +127,11 @@ public class TableroService {
                        case when exposicion > 0 then round(asignado_idoneo / exposicion, 4) end as cobertura_idonea
                 from indicador_portafolio where periodo >= ? order by periodo""", hoy.withDayOfMonth(1).minusMonths(11)));
         r.put("composicionPorTipo", jdbc.queryForList("""
-                select g.tipo_codigo as tipo, t.nombre, count(*) as garantias, coalesce(sum(g.valor_comercial), 0) as valor
+                select g.tipo_codigo as tipo, t.nombre, count(*) as garantias, coalesce(sum(g.valor_admisible), 0) as valor
                 from garantia g join tipo_garantia t on t.codigo = g.tipo_codigo
                 where g.macroestado in """ + ACTIVAS + " group by g.tipo_codigo, t.nombre order by valor desc"));
         r.put("composicionPorSegmento", jdbc.queryForList("""
-                select segmento, count(*) as garantias, coalesce(sum(valor_comercial), 0) as valor
+                select segmento, count(*) as garantias, coalesce(sum(valor_admisible), 0) as valor
                 from garantia where macroestado in """ + ACTIVAS + " group by segmento order by valor desc"));
         r.put("porEstado", jdbc.queryForList("select macroestado, count(*) as garantias from garantia group by macroestado order by 2 desc"));
         r.put("atencion", listaAlertas.stream().limit(10).toList());
@@ -141,6 +141,12 @@ public class TableroService {
     private static Map<String, Object> control(String nombre, String norma, BigDecimal nivel) {
         return Map.of("control", nombre, "norma", norma, "nivel", nivel,
                 "estado", nivel.compareTo(new BigDecimal("0.95")) >= 0 ? "CUMPLE" : nivel.compareTo(new BigDecimal("0.80")) >= 0 ? "EN_RIESGO" : "BRECHA");
+    }
+
+    private static String pesos(BigDecimal valor) {
+        java.text.NumberFormat f = java.text.NumberFormat.getCurrencyInstance(Locale.of("es", "CO"));
+        f.setMaximumFractionDigits(0);
+        return f.format(valor);
     }
 
     private static long n(Map<String, Object> m, String k) {
