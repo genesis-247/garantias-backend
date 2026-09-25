@@ -3,7 +3,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.1 — Borrador para validación |
+| Versión | 0.2 — Borrador para validación |
 | Fecha | 2026-09-25 |
 | Estado | En revisión (Negocio, Riesgo de Crédito, Jurídica, Cumplimiento, Arquitectura TI) |
 | Alcance de esta versión | MVP + visión de fases posteriores |
@@ -25,7 +25,7 @@ Construir una plataforma única, en la nube (Azure), para **registrar, perfeccio
 - Vinculación garantía–obligación(es)–terceros (propietarios, garantes).
 - Avalúos y revaluaciones (p. ej., vehículos con la Guía de Valores Fasecolda de forma anual).
 - Control de pólizas de seguro asociadas a la garantía.
-- Integración con registros públicos (Registro de Garantías Mobiliarias, catastro/IGAC, Superintendencia de Notariado y Registro) — **ver punto abierto P-01**.
+- Integración con registros públicos: Registro de Garantías Mobiliarias (Confecámaras), Superintendencia de Notariado y Registro, y **reporte del avalúo catastral de inmuebles al IGAC / gestor catastral**.
 - Expediente documental digital.
 - API de consulta de estado y valores para los aplicativos de producto.
 - Publicación de eventos de negocio en **Kafka**.
@@ -52,7 +52,10 @@ Construir una plataforma única, en la nube (Azure), para **registrar, perfeccio
 | PDI | Pérdida Dado el Incumplimiento; en los modelos de referencia de la SFC depende del tipo de garantía. |
 | RGM | Registro de Garantías Mobiliarias (Ley 1676/2013), administrado por Confecámaras. |
 | RAA | Registro Abierto de Avaluadores (Ley 1673/2013). |
-| Aplicativo de producto | Sistema que gestiona el flujo de un producto de crédito (hipotecario, vehículo, libranza, etc.) y que da origen a la garantía. |
+| Aplicativo de producto | Sistema que gestiona el flujo de un producto de crédito (hipotecario, vehículo, libranza, tarjeta de crédito, etc.) y que da origen a la garantía. |
+| Avalúo catastral | Valor del predio fijado por la autoridad catastral (IGAC o gestor catastral habilitado); distinto del avalúo comercial. |
+| NPN | Número Predial Nacional (30 dígitos) que identifica el predio en el catastro. |
+| Estado lógico | Identidad estable de un estado del flujo a través de sus versiones (patrón tomado de Proceder). |
 | Maker–checker | Doble control: quien registra una operación no puede aprobarla. |
 
 ---
@@ -80,6 +83,7 @@ La tabla relaciona cada norma con los módulos que la implementan. **Jurídica, 
 | N-15 | **Catálogo Único de Información Financiera (CUIF)** — cuentas de orden de bienes y valores recibidos en garantía; **NIIF 9** | Generar la información para el registro contable de las garantías en cuentas de orden y los insumos de pérdida esperada. | M12, M13 |
 | N-16 | **Ley 1527 de 2012** (libranza) | Cuando la operación de libranza tenga garantías asociadas (p. ej., pagaré o garantía de un fondo), se identifica el producto de origen. | M1 |
 | N-17 | Reglamentos del **Fondo Nacional de Garantías (FNG)** y del **FAG (Finagro)** | Para garantías de fondos: número de certificado, porcentaje de cobertura, vigencia, comisión y proceso de reclamación. | M1, M3 |
+| N-18 | **Ley 14 de 1983** (avalúos catastrales), **Ley 1955 de 2019, arts. 79-82** (gestión catastral multipropósito y gestores catastrales) y reglamentación técnica del **IGAC** | Registrar el avalúo catastral de cada inmueble en garantía (NPN, vigencia, gestor catastral) y **reportarlo al IGAC / gestor catastral** en el formato y la periodicidad exigidos. **Jurídica debe confirmar la norma y el formato exacto del reporte (P-01).** | M5, M7 |
 
 ---
 
@@ -91,6 +95,7 @@ flowchart LR
     HIP[Crédito hipotecario]
     VEH[Vehículo]
     LIB[Libranza]
+    TC[Tarjeta de crédito]
     OTR[Otros productos]
   end
 
@@ -102,7 +107,7 @@ flowchart LR
   subgraph Externos
     FAS[Fasecolda<br/>guía de valores]
     RGM[Confecámaras<br/>RGM]
-    IGAC[IGAC / gestores<br/>catastrales]
+    IGAC[IGAC / gestores<br/>catastrales<br/>avalúo catastral]
     SNR[SNR / ORIP<br/>VUR]
     AVA[Firmas avaluadoras]
     ASE[Aseguradoras]
@@ -111,10 +116,10 @@ flowchart LR
   CORE[Core bancario /<br/>Contabilidad]
   RIE[Riesgos / Regulatorio]
 
-  HIP & VEH & LIB & OTR -- "API registro / consulta" --> PG
+  HIP & VEH & LIB & TC & OTR -- "API registro / consulta" --> PG
   CRE -- "consulta cobertura" --> PG
   PG -- "eventos de garantía" --> KAF
-  KAF --> HIP & VEH & LIB & OTR & CORE & RIE
+  KAF --> HIP & VEH & LIB & TC & OTR & CORE & RIE
   SHI -. "migración" .-> PG
   PG <--> FAS & RGM & IGAC & SNR
   AVA -- "informes de avalúo" --> PG
@@ -156,16 +161,39 @@ Prioridad: **MVP** = primera versión productiva; **F2/F3** = fases posteriores.
 
 ### M1 — Catálogo configurable de tipos de garantía
 
+> **Referencia:** este módulo reutiliza el modelo del motor de parametrización de la plataforma **Proceder** (`genesis-247/factory-plataforma-proceder-legal`, RF-03, migraciones 0003 y 0009–0012). Allí ya se resolvieron problemas que aquí van a aparecer igual: versionamiento sin afectar lo que está en curso, renombrar sin reescribir registros y catálogos documentales no retroactivos. Las diferencias necesarias para garantías están marcadas como **[Garantías]**.
+
+**Modelo de configuración (heredado de Proceder):**
+
+| Elemento | Proceder | Plataforma de Garantías |
+|---|---|---|
+| Unidad configurable | Tipo de servicio | Tipo de garantía |
+| Catálogo de campos | `campos_catalogo`: campos **reutilizables** entre tipos | Igual |
+| Asociación campo–tipo | `campo_tipo_servicio`: obligatoriedad, orden y grupo **por tipo** | Igual; la obligatoriedad además puede depender del estado **[Garantías]** |
+| Tipos de dato | texto corto, texto largo, número, fecha, selección única | Los mismos + moneda, booleano, selección múltiple, referencia a catálogo maestro (DIVIPOLA, Fasecolda, aseguradoras…) **[Garantías]** |
+| Opciones de listas | Cada opción con `id` estable; se inactiva, nunca se borra | Igual |
+| Flujo de estados | Versionado e inmutable; `estado_logico_id` estable; validación de camino a estado final | Igual, pero cada estado configurable se **mapea a un macroestado regulatorio fijo** **[Garantías]** |
+| Documentos por tipo | Vigencia temporal (tipo SCD2), no retroactiva | Igual |
+| Almacenamiento | Columnas relacionales para campos transversales + JSONB para campos particulares | Igual |
+
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-101 | El Administrador puede **crear, editar, versionar e inactivar tipos de garantía** sin desarrollo de software. | MVP | N-01, N-02 |
-| RF-102 | Cada tipo tiene **atributos de comportamiento**: clase (real inmueble, mobiliaria, vehículo, fiduciaria, fondo de garantías, personal, depósito/CDT, pignoración de rentas, otra), si es admisible por defecto, si requiere avalúo, método y periodicidad de revaluación, si requiere registro público (y cuál), si requiere póliza, documentos obligatorios, porcentaje de cobertura máximo, si puede ser abierta o cerrada, y si permite respaldar varias obligaciones. | MVP | N-01, N-02 |
-| RF-103 | Cada tipo tiene un **formulario de campos personalizados** (en la línea de lo que se implementa en la plataforma Proceder — ver P-02): nombre, etiqueta, tipo de dato (texto, número, moneda, fecha, lista, lista dependiente, booleano, archivo, dirección, referencia a catálogo), obligatoriedad (según el estado de la garantía), validaciones (rango, expresión regular, longitud), valor por defecto, ayuda, agrupación en secciones y orden. | MVP | — |
-| RF-104 | Los campos personalizados se **exponen automáticamente** en la API (esquema JSON por tipo y versión), en la pantalla de captura, en la carga masiva (plantilla generada) y en los reportes. | MVP | — |
-| RF-105 | El **versionamiento** es obligatorio: las garantías existentes conservan la versión del tipo con la que se crearon; se puede definir una migración de versión opcional. | MVP | N-09 |
-| RF-106 | El catálogo inicial precargado incluye como mínimo: hipoteca (vivienda / no vivienda), garantía mobiliaria sobre vehículo, garantía mobiliaria sobre otros bienes (inventarios, maquinaria, derechos económicos), pignoración de CDT/depósitos, FNG, FAG, fiducia en garantía, pignoración de rentas, aval/codeudor, pagaré (no admisible). | MVP | N-01, N-17 |
-| RF-107 | **Reglas de negocio configurables** por tipo (p. ej., "si el vehículo es modelo > 10 años, requiere avalúo físico"), con un motor de reglas declarativo. | F2 | — |
-| RF-108 | Catálogos maestros administrables: departamentos/municipios (DIVIPOLA), tipos de documento, aseguradoras, firmas avaluadoras, notarías, ORIP, líneas y marcas Fasecolda, monedas, productos de origen. | MVP | — |
+| RF-101 | El Administrador puede **crear, editar, versionar e inactivar tipos de garantía** desde la interfaz, sin despliegue de código. Al inactivar un tipo con garantías vigentes, el sistema muestra una advertencia no bloqueante con el conteo afectado. | MVP | N-01, N-02 |
+| RF-102 | Cada tipo tiene **atributos de comportamiento**: clase (real inmueble, mobiliaria, vehículo, fiduciaria, fondo de garantías, personal, depósito/CDT, pignoración de rentas, otra), si es admisible por defecto, si requiere avalúo comercial, si requiere avalúo catastral, método y periodicidad de revaluación, registro público requerido (RGM, ORIP, ninguno), si requiere póliza, porcentaje de admisibilidad, si puede ser abierta o cerrada, y si permite respaldar varias obligaciones. | MVP | N-01, N-02 |
+| RF-103 | **Catálogo reutilizable de campos personalizados**: código (inmutable, sin colisión con los campos transversales reservados), etiqueta, tipo de dato, opciones (para listas), validaciones (rango, expresión regular, longitud), ayuda contextual y estado activo/inactivo. | MVP | — |
+| RF-104 | **Asociación campo–tipo de garantía**: por cada tipo se define qué campos del catálogo usa, su **obligatoriedad** (por tipo, y opcionalmente por estado: p. ej., "número de escritura" obligatorio solo para pasar a *Constituida*), su orden y su grupo o sección en el formulario. | MVP | — |
+| RF-105 | Las opciones de un campo de lista tienen **identificador estable**; la garantía guarda el identificador, no el texto. Renombrar una opción no requiere reescribir garantías; "eliminar" una opción es inactivarla. | MVP | N-09 |
+| RF-106 | Los **campos transversales** (id, tipo, versión, estado, valor vigente, fecha de avalúo, moneda, llave natural, aplicativo de origen, fechas de auditoría) son columnas relacionales indexadas y están siempre disponibles; los campos particulares se guardan en JSONB validado contra el esquema de la versión del tipo. | MVP | N-02 |
+| RF-107 | **Versionamiento no retroactivo**: modificar campos, obligatoriedad, flujo o documentos de un tipo en uso crea una versión nueva; las garantías existentes conservan la versión con la que se crearon. Un campo obligatorio nuevo no invalida garantías en curso. | MVP | N-09 |
+| RF-108 | **Flujo de estados configurable por tipo** (estados y transiciones permitidas), versionado e inmutable, con identidad estable de cada estado a través de las versiones (estado lógico). Si se elimina un estado que tiene garantías, el sistema exige indicar a qué estado se mueven antes de publicar la versión. | MVP | N-09 |
+| RF-109 | **Validación del flujo**: el sistema rechaza guardar un flujo en el que algún estado no tenga camino hacia un estado final. Las transiciones de retorno explícitas (p. ej., *Devuelta* → *En revisión*) se permiten. | MVP | — |
+| RF-110 | **[Garantías]** Cada estado configurable se **mapea a un macroestado regulatorio fijo** (sección M3). Así los reportes, la cobertura, los eventos Kafka y las integraciones funcionan igual para todos los tipos, aunque cada tipo tenga su propio flujo detallado. | MVP | N-02 |
+| RF-111 | **Tipos de documento por tipo de garantía**, cada uno obligatorio u opcional (y opcionalmente, obligatorio a partir de cierto estado), con vigencia temporal: los cambios aplican solo a garantías nuevas. | MVP | N-13 |
+| RF-112 | Los campos y documentos configurados se **exponen automáticamente** en la API (JSON Schema por tipo y versión), el formulario web dinámico, la plantilla de carga masiva y los reportes. El formulario se arma en < 3 s. | MVP | — |
+| RF-113 | El catálogo inicial precargado incluye como mínimo: hipoteca (vivienda / no vivienda), garantía mobiliaria sobre vehículo, garantía mobiliaria sobre otros bienes (inventarios, maquinaria, derechos económicos), pignoración de CDT/depósitos, FNG, FAG, fiducia en garantía, pignoración de rentas, aval/codeudor y pagaré (no admisible). | MVP | N-01, N-17 |
+| RF-114 | Toda la configuración (crear, versionar, publicar) queda en la bitácora de auditoría, y la publicación de una versión requiere doble control (sección 4.1). | MVP | N-09 |
+| RF-115 | **Reglas de negocio configurables** por tipo (p. ej., "si el vehículo tiene más de 10 años, requiere avalúo físico"), con un motor de reglas declarativo. | F2 | — |
+| RF-116 | Catálogos maestros administrables: departamentos/municipios (DIVIPOLA), tipos de documento de identidad, aseguradoras, firmas avaluadoras, notarías, ORIP, gestores catastrales, líneas y marcas Fasecolda, monedas y productos de origen. | MVP | — |
 
 ### M2 — Registro de garantías
 
@@ -176,7 +204,8 @@ Prioridad: **MVP** = primera versión productiva; **F2/F3** = fases posteriores.
 | RF-203 | Validación sincrónica contra el esquema del tipo/versión, con errores estructurados por campo. | MVP | — |
 | RF-204 | Detección de **duplicados** por llave natural configurable por tipo (p. ej., matrícula inmobiliaria; placa + VIN; número de CDT; certificado FNG). Si el bien ya respalda otra obligación, se vincula (garantía abierta o compartida) en lugar de duplicarse, según las reglas del tipo. | MVP | N-02 |
 | RF-205 | **Captura manual** en la interfaz web, con formulario dinámico generado desde el tipo de garantía. | MVP | — |
-| RF-206 | **Carga masiva** por archivo (CSV/XLSX) con plantilla descargable por tipo, validación previa (pre-carga con informe de errores por fila), aprobación maker–checker, procesamiento asíncrono y reporte de resultados. | MVP | N-09 |
+| RF-206 | **Carga masiva** con un asistente de 4 pasos (patrón de Proceder, RF-17): (1) elegir el tipo de garantía y descargar su plantilla, generada desde la versión vigente; (2) cargar el archivo CSV/XLSX y validar tamaño y estructura; (3) validación previa con reporte de errores por fila (fila, campo, motivo), exportable; las filas que coinciden con una garantía existente se marcan como "actualizará registro existente" y requieren confirmación explícita aparte; (4) confirmación y aprobación maker–checker. El procesamiento es asíncrono y el resultado indica filas cargadas y rechazadas. | MVP | N-09 |
+| RF-206a | La carga masiva neutraliza la inyección de fórmulas (celdas que empiezan por `=`, `+`, `-` o `@` se tratan como texto), tiene límites de tamaño, filas, tiempo y memoria, y deja un historial auditable (usuario, fecha, archivo, tipo, filas cargadas y rechazadas). | MVP | N-09 |
 | RF-207 | Actualización vía API de los datos de la garantía únicamente en estados que lo permitan (p. ej., antes de *Constituida*); después, los cambios se hacen por novedad controlada. | MVP | N-09 |
 | RF-208 | Registro alterno por **consumo de eventos Kafka** publicados por los aplicativos de producto (patrón asíncrono además del REST). | F2 | — |
 
@@ -205,7 +234,7 @@ stateDiagram-v2
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-301 | La máquina de estados anterior es la **base común**; cada tipo de garantía puede tener subestados o pasos adicionales (checklist de perfeccionamiento) configurables. | MVP | N-02 |
+| RF-301 | Los estados del diagrama son los **macroestados regulatorios fijos**. Cada tipo de garantía define su propio flujo detallado (RF-108) y cada estado de ese flujo se mapea a uno de estos macroestados (RF-110). Ejemplo para hipoteca: *Minuta enviada*, *Escritura firmada* y *En registro ORIP* → macroestado *En constitución*. | MVP | N-02 |
 | RF-302 | Cada transición registra: usuario o sistema, fecha y hora, motivo, soporte documental y aprobador (cuando aplica maker–checker). | MVP | N-09 |
 | RF-303 | **Perfeccionamiento**: checklist por tipo (p. ej., hipoteca: minuta → escritura → boleta fiscal → registro ORIP → certificado de tradición con anotación). La garantía no pasa a *Constituida* sin los ítems obligatorios. | MVP | N-03, N-04 |
 | RF-304 | **Liberación**: cuando todas las obligaciones respaldadas están canceladas (evento del core o del producto), se genera automáticamente una tarea de liberación, con un SLA parametrizable, para emitir los documentos de cancelación y, en el caso de mobiliarias, el formulario de cancelación en el RGM. | MVP | N-03, N-12 |
@@ -234,6 +263,8 @@ stateDiagram-v2
 | RF-504 | **Actualización del valor de inmuebles** por el método parametrizado (índice, p. ej., IVP del DANE o valor catastral, o nuevo avalúo técnico según la periodicidad definida por Riesgos). | F2 **[SUPUESTO]** | N-02, N-05 |
 | RF-505 | Cálculo del **valor admisible** = valor vigente × porcentaje de admisibilidad del tipo (parametrizable), con los descuentos por antigüedad del avalúo que defina Riesgos. | MVP | N-01, N-02 |
 | RF-506 | Alertas de **avalúo vencido** o próximo a vencer, según la periodicidad de cada tipo. | MVP | N-02 |
+| RF-508 | **Avalúo catastral de inmuebles**: por cada inmueble en garantía se registra el Número Predial Nacional, el gestor catastral competente (IGAC o gestor habilitado del municipio), el valor del avalúo catastral, la vigencia (año) y el soporte. Se conserva el histórico por vigencia, separado del avalúo comercial. | MVP | N-18 |
+| RF-509 | Actualización anual del avalúo catastral: carga masiva o consulta al gestor catastral al inicio de cada vigencia, con alerta de los inmuebles sin avalúo catastral de la vigencia actual. | MVP / F2 | N-18 |
 | RF-507 | Integración con firmas avaluadoras para solicitar avalúos y recibir informes de forma electrónica. | F3 | N-05 |
 
 ### M6 — Pólizas de seguro
@@ -250,7 +281,7 @@ stateDiagram-v2
 |---|---|---|---|
 | RF-701 | **Garantías mobiliarias — RGM (Confecámaras)**: registrar número de folio electrónico, fecha y tipo de formulario (inicial, modificación, prórroga, cancelación, ejecución). En el MVP el registro es manual con soporte adjunto; integración automática en F2. | MVP / F2 | N-03 |
 | RF-702 | **Inmuebles — ORIP / SNR**: registrar la matrícula inmobiliaria, el número de escritura, la notaría, la fecha y la anotación; adjuntar el certificado de tradición. Consulta automática de certificados (VUR o servicio disponible) en F2. | MVP / F2 | N-04 |
-| RF-703 | **IGAC / gestores catastrales**: reporte o consulta de información predial y catastral de los inmuebles según lo que exija el negocio. **Ver P-01**: el alcance exacto del reporte "a Agustín Codazzi" debe confirmarse. | F2 **[SUPUESTO]** | P-01 |
+| RF-703 | **Reporte del avalúo catastral de inmuebles al IGAC / gestor catastral**: generación del reporte (archivo o servicio) de los inmuebles en garantía con NPN, matrícula inmobiliaria, dirección, municipio, avalúo catastral y vigencia, en el formato y la periodicidad que se definan. El formato es configurable. Cada envío queda con su constancia, los rechazos pasan a una bandeja de corrección y se permite reprocesar. En el MVP se genera el archivo y se registra el envío; la transmisión automática va en F2. | MVP / F2 | N-18 |
 | RF-704 | Cada integración externa registra la solicitud, la respuesta, los errores y los reintentos (bitácora de interoperabilidad). | MVP | N-09 |
 
 ### M8 — Expediente documental
@@ -353,8 +384,8 @@ stateDiagram-v2
 | Capa | Propuesta | Justificación |
 |---|---|---|
 | Backend | **Java 21 + Spring Boot 3** (monolito modular con límites claros por módulo, preparado para extraer servicios si fuera necesario) | Estándar en la banca colombiana, LTS, ecosistema maduro para Kafka, seguridad y pruebas. Alternativa equivalente: .NET 8. |
-| Frontend | **React + TypeScript** (Vite), con librería de componentes accesible y un **renderizador de formularios dinámicos basado en JSON Schema** | Los campos personalizados por tipo de garantía (RF-103) se definen como esquema y la UI se genera sin desarrollo. |
-| Base de datos | **Azure Database for PostgreSQL – Flexible Server** (zona redundante); campos personalizados en **JSONB** validados contra JSON Schema, con índices GIN | Modelo relacional para el núcleo y flexibilidad para los atributos configurables. |
+| Frontend | **Next.js (React + TypeScript) + Tailwind CSS + shadcn/ui, React Hook Form + Zod, TanStack Query**, con un **renderizador de formularios dinámicos basado en JSON Schema** | Es el mismo stack de front de Proceder: el equipo reutiliza componentes (formulario dinámico, asistente de carga masiva, editor de flujos) y conocimiento. Se despliega como contenedor en Azure, no en Vercel. |
+| Base de datos | **Azure Database for PostgreSQL – Flexible Server** (zona redundante); campos personalizados en **JSONB** validados contra JSON Schema, con índices GIN | Es el mismo modelo híbrido de Proceder (PostgreSQL relacional + JSONB), así que el diseño de las tablas de configuración puede portarse casi directo. |
 | Mensajería | **Kafka** (el cluster corporativo existente o Azure Event Hubs con protocolo Kafka — ver P-07) + Schema Registry | Requisito explícito del negocio. |
 | Cómputo | **Azure Kubernetes Service** o **Azure Container Apps** | Contenedores portables (plan de salida de la CE 005/2019). |
 | Exposición de APIs | **Azure API Management** + Application Gateway/WAF | Seguridad, cuotas y catálogo de APIs para los productos. |
@@ -364,6 +395,8 @@ stateDiagram-v2
 | Secretos | **Azure Key Vault** | — |
 | Observabilidad | Azure Monitor, Application Insights, Log Analytics; SIEM corporativo (p. ej., Sentinel) | — |
 | IaC / CI-CD | Terraform o Bicep; Azure DevOps o GitHub Actions | — |
+
+> **Diferencia con Proceder:** Proceder corre en Vercel + Supabase. Esta plataforma debe correr en **Azure** (decisión D-11, CE 005/2019), integrarse con **Kafka** y operar 24/7 con cargas batch (Fasecolda, catastro, migración). Por eso el backend se propone como un servicio independiente (Java/Spring Boot) y no con Server Actions ni Supabase. Las **tablas y reglas** del motor de configuración sí se portan. Si Arquitectura prefiere un backend en TypeScript (NestJS) para compartir más código con Proceder, también es viable (P-17).
 
 ### 7.1 Estructura de repositorios
 - `garantias-backend`: API, dominio, integraciones, batch y migración.
@@ -376,7 +409,11 @@ stateDiagram-v2
 ```mermaid
 erDiagram
   TIPO_GARANTIA ||--o{ VERSION_TIPO : tiene
-  VERSION_TIPO ||--o{ DEFINICION_CAMPO : define
+  CAMPO_CATALOGO ||--o{ CAMPO_TIPO_GARANTIA : "se usa en"
+  VERSION_TIPO ||--o{ CAMPO_TIPO_GARANTIA : define
+  VERSION_TIPO ||--o{ FLUJO_ESTADO : "tiene flujo"
+  FLUJO_ESTADO ||--o{ TRANSICION_PERMITIDA : origen
+  TIPO_GARANTIA ||--o{ TIPO_DOCUMENTO_GARANTIA : exige
   VERSION_TIPO ||--o{ GARANTIA : "instancia de"
   GARANTIA ||--o{ GARANTIA_OBLIGACION : respalda
   GARANTIA ||--o{ PARTICIPANTE_GARANTIA : "tiene"
@@ -396,7 +433,10 @@ erDiagram
 | GARANTIA | id (UUID), tipo + versión, estado, subestado, clase, abierta/cerrada, moneda, valor vigente, valor admisible, fecha del último avalúo, próxima revaluación, llave natural, aplicativo de origen, referencia externa, id Shivam, `atributos` (JSONB), auditoría. |
 | GARANTIA_OBLIGACION | id de la obligación en el core, número de solicitud, producto, valor/porcentaje asignado, fechas de vínculo y desvínculo. |
 | PARTICIPANTE_GARANTIA | persona, rol (propietario, constituyente, garante, deudor), porcentaje. |
-| AVALUO | tipo, fecha, valor, fuente (avaluador, Fasecolda, índice), avaluador y RAA, vigencia, documento. |
+| AVALUO | tipo (comercial, catastral, Fasecolda, índice), fecha, valor, fuente, avaluador y RAA (comercial), NPN, gestor catastral y vigencia (catastral), documento. |
+| CAMPO_CATALOGO / CAMPO_TIPO_GARANTIA | Como `campos_catalogo` / `campo_tipo_servicio` de Proceder: código, etiqueta, tipo de dato, opciones con id estable; obligatoriedad (por tipo y estado), orden y grupo. |
+| FLUJO_ESTADO / TRANSICION_PERMITIDA | Como `flujo_estados` / `transiciones_permitidas` de Proceder, más `macroestado` (RF-110) y `estado_logico_id`. |
+| TIPO_DOCUMENTO_GARANTIA | Vigencia desde/hasta (no retroactiva), obligatorio, estado desde el que es exigible. |
 | POLIZA | aseguradora, número, ramo, valor asegurado, vigencia, beneficiario. |
 | REGISTRO_PUBLICO | entidad (RGM, ORIP, otra), número (folio / matrícula), tipo de acto, fecha, documento. |
 
@@ -453,13 +493,13 @@ Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
 
 | Incluido en el MVP | Fases posteriores |
 |---|---|
-| M1 catálogo configurable + campos personalizados + catálogo inicial | Motor de reglas avanzado (RF-107) |
+| M1 catálogo configurable: campos, flujos y documentos por tipo (modelo Proceder) + catálogo inicial | Motor de reglas avanzado (RF-115) |
 | M2 API de registro, captura manual, carga masiva | Registro por evento Kafka (RF-208) |
 | M3 ciclo de vida: registro → constitución → vigente → liberación | Sustitución, liberación parcial, ejecución (RF-305/306) |
 | M4 vinculaciones N:M, participantes, cobertura | SARLAFT en la plataforma (RF-404) |
 | M5 avalúos, valor admisible, revaluación Fasecolda anual, alertas | Actualización de inmuebles por índice, integración con avaluadores |
 | M6 pólizas + alertas | Integración con aseguradoras |
-| M7 registro manual de RGM / ORIP con soportes | Integraciones automáticas RGM, VUR, IGAC |
+| M7 registro manual de RGM / ORIP con soportes; **archivo de reporte del avalúo catastral al IGAC / gestor catastral** | Integraciones automáticas RGM, VUR y transmisión automática al IGAC |
 | M8 expediente con retención WORM | Gestor documental corporativo |
 | M9 alertas y bandejas | — |
 | M10 API de consulta | Webhooks |
@@ -506,6 +546,9 @@ Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
 | D-10 | Se **migra** desde el legado Shivam. |
 | D-11 | Nube: **Azure**; operación **24/7**; idioma **español**; stack moderno por definir (propuesta en la sección 7). |
 | D-12 | Se entrega por **MVP** y fases. |
+| D-13 | Se reporta el **avalúo catastral de los inmuebles** al IGAC / gestor catastral (P-01 resuelta). Las mobiliarias se inscriben en el RGM de Confecámaras. |
+| D-14 | La configuración de tipos, campos, flujos y documentos sigue el modelo del motor de parametrización de **Proceder** (P-02 resuelta). |
+| D-15 | **Tarjeta de crédito** es uno de los aplicativos de producto que registran garantías (P-03 resuelta). |
 
 ---
 
@@ -513,9 +556,9 @@ Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
 
 | # | Pregunta / supuesto | Responsable sugerido |
 |---|---|---|
-| **P-01** | **Reporte a "Agustín Codazzi":** las garantías mobiliarias se inscriben en el **RGM de Confecámaras** (Ley 1676/2013), no en el IGAC. El IGAC y los gestores catastrales tienen que ver con **inmuebles** (información catastral). ¿El requerimiento es (a) reportar o consultar información catastral de inmuebles hipotecados en el IGAC o el gestor catastral, (b) inscribir las mobiliarias en el RGM, o (c) ambos? ¿Hay un formato o servicio definido? | Jurídica / Negocio |
-| P-02 | ¿Qué es exactamente la "plataforma Proceder" y qué capacidades de personalización de campos tiene (tipos de campo, reglas, dependencias)? Un ejemplo o una captura permitiría alinear el RF-103. | Negocio |
-| P-03 | Productos de origen: se mencionan hipotecario, **TV** y libranza. ¿Qué significa "TV"? ¿Cuál es la lista completa de aplicativos que se integran en el MVP? | Negocio |
+| P-01 | ~~Alcance del reporte al IGAC~~ → **Resuelta (D-13).** Sigue pendiente: norma o requerimiento exacto que origina el reporte, formato (estructura del archivo o servicio), periodicidad y destinatario (IGAC o cada gestor catastral según el municipio). | Jurídica / Negocio |
+| P-02 | ~~Capacidades de Proceder~~ → **Resuelta (D-14).** Revisado en el repositorio. Sigue pendiente: confirmar si en garantías hacen falta los tipos de dato adicionales (moneda, booleano, selección múltiple, referencia a catálogo) y la obligatoriedad por estado, que Proceder no tiene. | Negocio |
+| P-03 | ~~Significado de "TV"~~ → **Resuelta (D-15): tarjeta de crédito.** Sigue pendiente: la lista completa de aplicativos de producto que se integran en el MVP y qué garantías registra cada uno (p. ej., tarjeta de crédito: ¿CDT pignorado, FNG?). | Negocio |
 | P-04 | ¿El cliente o el beneficiario necesitan algún canal propio? (Supuesto: no; la plataforma es interna y se expone a los aplicativos vía API.) | Negocio |
 | P-05 | Estrategia de salida desde Shivam: ¿corte único o convivencia por producto? ¿Shivam expone base de datos o solo archivos? ¿Volumen de garantías y documentos? | TI / Negocio |
 | P-06 | Volúmenes: garantías vigentes, registros por día, usuarios concurrentes y picos (para dimensionar RNF-03). | Negocio / TI |
@@ -529,7 +572,8 @@ Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
 | P-14 | Listado de formatos regulatorios de la SFC que hoy se alimentan con información de garantías desde Shivam. | Regulatorio |
 | P-15 | Umbrales de maker–checker (monto o porcentaje de cambio de valor) y SLA de liberación. | Negocio / Riesgo |
 | P-16 | Aprobadores formales de este documento. | Dirección del proyecto |
-| P-17 | Stack tecnológico: ¿aprueba Arquitectura la propuesta (Java/Spring Boot + React + PostgreSQL en Azure) o hay preferencia por .NET? | Arquitectura TI |
+| P-17 | Stack tecnológico: ¿aprueba Arquitectura la propuesta (Java/Spring Boot + Next.js + PostgreSQL en Azure), o prefiere .NET, o un backend en TypeScript (NestJS) para reutilizar más código de Proceder? | Arquitectura TI |
+| P-18 | Metodología: ¿se descompone esta especificación en `specs/RF-xx/spec.md` con criterios de aceptación en formato EARS, como en Proceder (lineamientos de la fábrica IngenIA), antes de construir? | Dirección del proyecto |
 
 ---
 
@@ -537,3 +581,4 @@ Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
 | Versión | Fecha | Autor | Cambio |
 |---|---|---|---|
 | 0.1 | 2026-09-25 | Equipo de proyecto | Versión inicial a partir del levantamiento con el negocio. |
+| 0.2 | 2026-09-25 | Equipo de proyecto | Reporte del avalúo catastral al IGAC (N-18, RF-508/509, RF-703); tarjeta de crédito como producto de origen; M1 rediseñado sobre el motor de parametrización de Proceder (campos reutilizables, flujos versionados con macroestados, documentos no retroactivos); carga masiva con el asistente de Proceder; alineación del stack de front. |
