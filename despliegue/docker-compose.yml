@@ -1,0 +1,35 @@
+# Garantías 360 — ambiente de demostración completo en una sola máquina.
+# Uso (desde garantias-backend/despliegue, con garantias-frontend clonado al lado):
+#   docker compose up --build        →  http://localhost:3000
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: garantias360
+      POSTGRES_USER: g360
+      POSTGRES_PASSWORD: g360
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U g360 -d garantias360"]
+      interval: 5s
+      retries: 20
+    volumes: [datos:/var/lib/postgresql/data]
+
+  backend:
+    build: ..
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      G360_DB_URL: jdbc:postgresql://postgres:5432/garantias360
+      G360_DB_USUARIO: g360
+      G360_DB_CLAVE: g360
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  frontend:
+    build:
+      context: ../../garantias-frontend
+      args: { BACKEND_URL: "http://backend:8080" }
+    ports: ["3000:3000"]
+    depends_on: [backend]
+
+volumes:
+  datos:
