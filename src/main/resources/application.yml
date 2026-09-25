@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: garantias360
+  datasource:
+    url: ${G360_DB_URL:jdbc:postgresql://localhost:5432/garantias360}
+    username: ${G360_DB_USUARIO:g360}
+    password: ${G360_DB_CLAVE:g360}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: always
+  kafka:
+    bootstrap-servers: ${G360_KAFKA_SERVIDORES:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${G360_ENTRA_ISSUER:https://login.microsoftonline.com/common/v2.0}
+          audiences: ${G360_ENTRA_AUDIENCIA:api://garantias360}
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  pattern:
+    level: "%5p [corr:%X{correlationId:-}]"
+
+g360:
+  cors:
+    origenes: ${G360_CORS:http://localhost:3000}
+  kafka:
+    habilitado: ${G360_KAFKA_HABILITADO:false}
+    topico-flexcube: bp.flexcube.obligaciones.v1
+  outbox:
+    intervalo-ms: 2000
+    max-intentos: 5
+  # TRM de referencia para garantías en moneda extranjera. En producción la provee la integración
+  # con Banco de la República (pendiente); aquí es un parámetro auditable del ambiente.
+  trm:
+    USD: '4000'
+    EUR: '4350'
+  demo:
+    cargar: ${G360_DEMO_CARGAR:false}

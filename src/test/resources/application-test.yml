@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: ${G360_TEST_DB_URL:jdbc:postgresql://localhost:5432/garantias360_test}
+  flyway:
+    clean-disabled: false
+g360:
+  outbox:
+    intervalo-ms: 500
