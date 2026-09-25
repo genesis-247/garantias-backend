@@ -1,406 +1,531 @@
 # Especificación funcional y normativa
-## Plataforma de Gestión de Garantías — Banco Popular S.A. (Colombia)
+## Garantías 360 — Banco Popular S.A. (Colombia)
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.2 — Borrador para validación |
+| Versión | 0.3 — Borrador para validación |
 | Fecha | 2026-09-25 |
 | Estado | En revisión (Negocio, Riesgo de Crédito, Jurídica, Cumplimiento, Arquitectura TI) |
-| Alcance de esta versión | MVP + visión de fases posteriores |
+| Alcance de esta versión | MVP productivo + fases posteriores |
+| Anexos | [A — Motor de cobertura](ANEXO_A_MOTOR_COBERTURA.md) · [B — Motor de reglas](ANEXO_B_MOTOR_REGLAS.md) · [C — Garantías sobre cesantías y ahorro en el FNA](ANEXO_C_FNA.md) |
 
-> **Cómo leer este documento.** Cada requisito funcional (RF) lleva un identificador, su prioridad (MVP / F2 / F3) y, cuando aplica, la norma que lo origina. Todo lo que no fue confirmado por el negocio aparece marcado como **[SUPUESTO]** y está consolidado en la sección 14 para su validación.
+> **Cómo leer este documento.** Cada requisito funcional (RF) lleva identificador, prioridad (**MVP** / **F2** / **F3**) y, cuando aplica, la norma que lo origina (N-xx, sección 3). Todo lo que no fue confirmado por el negocio aparece como **[SUPUESTO]** y se consolida en la sección 16.
 
 ---
 
 ## 1. Introducción
 
 ### 1.1 Objetivo
-Construir una plataforma única, en la nube (Azure), para **registrar, perfeccionar, valorar, monitorear, liberar y ejecutar las garantías que el Banco recibe como respaldo de sus operaciones de crédito**. La plataforma reemplaza el sistema actual del proveedor Shivam y es la fuente oficial de información de garantías para los aplicativos de producto, el motor de otorgamiento (Credicore), Riesgos, Contabilidad y los reportes regulatorios.
+Construir **Garantías 360**, el **maestro único de garantías** del Banco. Es una plataforma productiva en Azure que controla el ciclo de vida completo del respaldo crediticio, desde la originación hasta la liberación: registro, estudio jurídico, constitución y perfeccionamiento, valoración, cobertura, monitoreo, ejecución y liberación. Reemplaza el sistema actual del proveedor Shivam.
+
+La plataforma debe sostener tres mensajes:
+1. **Una sola visión de la garantía.** Toda la información de una garantía y de las obligaciones que respalda está en un único expediente.
+2. **Cada cálculo es explicable.** Cobertura, valoración, reglas y alertas muestran de dónde sale cada cifra.
+3. **Cada decisión tiene evidencia.** Datos, documentos, reglas, versiones y acciones conservan trazabilidad verificable (SHA-256).
 
 ### 1.2 Alcance
-**Incluido**
-- Catálogo **configurable** de tipos de garantía, con campos personalizables por tipo, sin desarrollo adicional.
-- Registro de garantías vía **API** (desde los aplicativos de producto), **captura manual** y **carga masiva**.
-- Gestión del ciclo de vida completo: constitución, perfeccionamiento, vigencia, revaluación, sustitución, liberación/cancelación y ejecución.
-- Vinculación garantía–obligación(es)–terceros (propietarios, garantes).
-- Avalúos y revaluaciones (p. ej., vehículos con la Guía de Valores Fasecolda de forma anual).
-- Control de pólizas de seguro asociadas a la garantía.
-- Integración con registros públicos: Registro de Garantías Mobiliarias (Confecámaras), Superintendencia de Notariado y Registro, y **reporte del avalúo catastral de inmuebles al IGAC / gestor catastral**.
-- Expediente documental digital.
-- API de consulta de estado y valores para los aplicativos de producto.
-- Publicación de eventos de negocio en **Kafka**.
-- Reportes de gestión y soporte a reportes regulatorios.
-- Migración de datos desde Shivam.
+**Garantías y productos incluidos:** libranzas, tarjetas de crédito, Banca Empresas, créditos con respaldo del FNA (anexo C), garantías FNG, garantías inmobiliarias, vehiculares, depósitos en garantía, derechos económicos y de cobro, garantías mobiliarias, fiducias en garantía, y cualquier tipo nuevo que el negocio configure sin desarrollo (M16).
 
-**Excluido**
-- Garantías que el Banco **otorga** a terceros (garantías bancarias / stand-by / contingentes).
-- Originación y aprobación del crédito (responsabilidad de los aplicativos de producto y Credicore).
-- Contabilidad general (la plataforma genera eventos/interfaces; el registro contable ocurre en el core).
-- Cálculo de provisiones (la plataforma provee los insumos de garantía; el cálculo es de Riesgos).
+**Excluido:**
+- Garantías que el Banco **otorga** a terceros (garantías bancarias / stand-by).
+- Originación y aprobación del crédito (aplicativos de producto).
+- Workflow y bandejas de tareas humanas (**Appian**, D-16).
+- Datos financieros de la obligación (**Flexcube**).
+- Custodia de documentos originales (**OnBase / DocCenter**, D-18).
+- Decisión y cálculo final de riesgo (**FICO**, D-19).
+- Contabilidad general.
 
 ### 1.3 Glosario
 | Término | Definición |
 |---|---|
 | Garantía | Bien, derecho o compromiso de un tercero que respalda una o varias obligaciones del deudor con el Banco. |
-| Garantía admisible / idónea | Garantía que cumple las condiciones del art. 2.1.2.1.3 del Decreto 2555/2010 (valor suficiente, jurídicamente eficaz, posibilidad real de realización). |
-| Garantía abierta | Respalda todas las obligaciones presentes y futuras del deudor, hasta un monto o sin límite. |
-| Garantía cerrada | Respalda una obligación específica. |
-| Perfeccionamiento | Cumplimiento de las formalidades legales para que la garantía sea oponible (escritura + registro, inscripción en RGM, etc.). |
-| Avalúo | Estimación técnica del valor de un bien realizada por un avaluador inscrito en el RAA. |
-| Revaluación | Actualización periódica del valor de la garantía (por índice, guía de valores o nuevo avalúo). |
-| Cobertura | Relación entre el valor de la garantía asignado a una obligación y el saldo de esa obligación. |
-| PDI | Pérdida Dado el Incumplimiento; en los modelos de referencia de la SFC depende del tipo de garantía. |
+| Garantía idónea / admisible | Garantía que cumple el art. 2.1.2.1.3 del Decreto 2555/2010: valor establecido con criterios técnicos y objetivos, suficiente, jurídicamente eficaz y con posibilidad real de realización. En este documento *idónea* = *admisible*. |
+| Garantía condicionada | Garantía con concepto jurídico favorable sujeto a condicionamientos pendientes. No es idónea hasta que se cumplan. |
+| Valor comercial | Valor de mercado de la última valoración vigente. |
+| Valor técnico | Valor determinado por el perito según la metodología (p. ej., valor de reposición o de realización). |
+| Haircut | Descuento porcentual que refleja riesgo de realización, liquidez, antigüedad del avalúo o moneda. Lo define una regla (anexo B). |
+| Valor admisible | Valor bruto × (1 − haircut). |
+| Valor neto | Valor admisible − gravámenes de mayor prelación − valor comprometido con otros acreedores. Es el valor distribuible entre obligaciones. |
+| Exposición | Saldo de la obligación que se considera para cubrir (componentes configurables: capital, intereses, otros). Proviene de Flexcube. |
+| Cobertura objetivo / real | Cobertura exigida por política (regla) frente a la obtenida (valor asignado ÷ exposición). |
+| Descubierto | Parte de la exposición sin cubrir: max(0, exposición − valor asignado). |
+| Brecha de cobertura | max(0, exposición × cobertura objetivo − valor asignado). |
+| Perfeccionamiento | Cumplimiento de las formalidades legales para que la garantía sea oponible a terceros. |
+| Correlation ID | Identificador que acompaña una operación de negocio a través de todos los sistemas, eventos y registros. |
+| Maker–checker | Doble control: quien crea o modifica no puede aprobar. |
+| NPN | Número Predial Nacional (catastro). |
 | RGM | Registro de Garantías Mobiliarias (Ley 1676/2013), administrado por Confecámaras. |
-| RAA | Registro Abierto de Avaluadores (Ley 1673/2013). |
-| Aplicativo de producto | Sistema que gestiona el flujo de un producto de crédito (hipotecario, vehículo, libranza, tarjeta de crédito, etc.) y que da origen a la garantía. |
-| Avalúo catastral | Valor del predio fijado por la autoridad catastral (IGAC o gestor catastral habilitado); distinto del avalúo comercial. |
-| NPN | Número Predial Nacional (30 dígitos) que identifica el predio en el catastro. |
-| Estado lógico | Identidad estable de un estado del flujo a través de sus versiones (patrón tomado de Proceder). |
-| Maker–checker | Doble control: quien registra una operación no puede aprobarla. |
 
 ---
 
-## 2. Marco normativo
+## 2. Principio de arquitectura funcional
 
-La tabla relaciona cada norma con los módulos que la implementan. **Jurídica, Riesgos y Cumplimiento deben validar vigencia y alcance antes de aprobar el documento.**
+**Garantías 360 es el maestro de garantías y no sustituye a los sistemas especializados.**
 
-| # | Norma | Qué exige a la plataforma | Módulos |
-|---|---|---|---|
-| N-01 | **Decreto 2555 de 2010**, art. 2.1.2.1.3 y ss. (garantías admisibles) | Clasificar cada garantía como admisible o no, con criterios parametrizables: valor establecido con base en criterios técnicos y objetivos, eficacia jurídica y posibilidad de realización. | M1, M3, M5 |
-| N-02 | **Circular Básica Contable y Financiera (CE 100/1995) — Cap. XXXI (SIAR), Anexo de Riesgo de Crédito, y anexos de modelos de referencia de cartera** | Contar con información de garantías completa, actualizada y trazable; valor de la garantía y su actualización periódica; tipo de garantía como insumo de la PDI; políticas de valoración, seguimiento y realización. | M1, M4, M5, M10, M12 |
-| N-03 | **Ley 1676 de 2013** y **Decreto 1835 de 2015** (compilado en el DUR 1074 de 2015) — Garantías mobiliarias | Inscribir en el RGM el formulario de inscripción inicial, modificación, prórroga, cancelación y ejecución; conservar el número de folio electrónico; cancelar la inscripción cuando se extinga la obligación. | M3, M7 |
-| N-04 | **Ley 1579 de 2012** (Estatuto de Registro de Instrumentos Públicos) | Para hipotecas: registro de la escritura en la ORIP, seguimiento del certificado de tradición y libertad, matrícula inmobiliaria, anotación de la hipoteca y de su cancelación. | M3, M7 |
-| N-05 | **Ley 1673 de 2013** y **Decreto 556 de 2014** (actividad del avaluador); **Resolución IGAC 620 de 2008** (metodologías de avalúo) | Registrar el avaluador con su número RAA vigente; conservar el informe de avalúo; validar la metodología utilizada. | M5 |
-| N-06 | **Ley 546 de 1999** (vivienda) y normas de **seguros asociados a créditos hipotecarios y leasing habitacional** (Decreto 2555/2010, Libro 36, Título 2, Cap. 2 — licitación de seguros; Decreto 673/2014) | Controlar la existencia y vigencia de los seguros de incendio y terremoto sobre los inmuebles hipotecados; registrar el Banco como beneficiario oneroso. | M6 |
-| N-07 | **Guía de Valores Fasecolda** (referencia de mercado para vehículos) | Revaluación anual del valor comercial de vehículos pignorados o con garantía mobiliaria. | M5 |
-| N-08 | **Circular Básica Jurídica (CE 029/2014), Parte I, Título IV, Cap. IV — SARLAFT** | Consultar en listas restrictivas y vinculantes a propietarios y garantes que no sean clientes; conservar la evidencia de la consulta. | M4 |
-| N-09 | **CBCF Cap. XXXI (SIAR) — Riesgo operacional** y **CBJ Parte I, Título IV, Cap. V — Ciberseguridad** (antes CE 007/2018) | Trazabilidad, doble control, segregación de funciones, gestión de incidentes, seguridad de la información y continuidad del negocio. | M15, RNF |
-| N-10 | **CE 005 de 2019 SFC** (computación en la nube) | Evaluación del proveedor de nube, ubicación y cifrado de los datos, acceso de la SFC a la información, planes de salida y continuidad. Aplica al despliegue en Azure. | RNF, Arquitectura |
-| N-11 | **Ley 1581 de 2012** y Decreto 1377 de 2013 (datos personales); **Ley 1266 de 2008** (hábeas data financiero) | Tratamiento de los datos de propietarios y garantes conforme a una finalidad autorizada; minimización de datos; atención de consultas y reclamos. | M4, M15 |
-| N-12 | **Ley 1328 de 2009** (protección al consumidor financiero) | Liberación oportuna de garantías y expedición de la documentación de cancelación cuando la obligación se extingue; información clara al consumidor. | M3 |
-| N-13 | **Código de Comercio, art. 60** y **Ley 962 de 2005, art. 28** | Conservar libros y papeles del comerciante por **10 años** (base para la política de retención). | M8, M15 |
-| N-14 | **Ley 527 de 1999** y **Decreto 2364 de 2012** | Validez de mensajes de datos, documentos electrónicos y firma electrónica en el expediente digital. | M8 |
-| N-15 | **Catálogo Único de Información Financiera (CUIF)** — cuentas de orden de bienes y valores recibidos en garantía; **NIIF 9** | Generar la información para el registro contable de las garantías en cuentas de orden y los insumos de pérdida esperada. | M12, M13 |
-| N-16 | **Ley 1527 de 2012** (libranza) | Cuando la operación de libranza tenga garantías asociadas (p. ej., pagaré o garantía de un fondo), se identifica el producto de origen. | M1 |
-| N-17 | Reglamentos del **Fondo Nacional de Garantías (FNG)** y del **FAG (Finagro)** | Para garantías de fondos: número de certificado, porcentaje de cobertura, vigencia, comisión y proceso de reclamación. | M1, M3 |
-| N-18 | **Ley 14 de 1983** (avalúos catastrales), **Ley 1955 de 2019, arts. 79-82** (gestión catastral multipropósito y gestores catastrales) y reglamentación técnica del **IGAC** | Registrar el avalúo catastral de cada inmueble en garantía (NPN, vigencia, gestor catastral) y **reportarlo al IGAC / gestor catastral** en el formato y la periodicidad exigidos. **Jurídica debe confirmar la norma y el formato exacto del reporte (P-01).** | M5, M7 |
+| Sistema | Responsabilidad | Relación con Garantías 360 |
+|---|---|---|
+| **Garantías 360** | Maestro de garantías, relaciones garantía–obligación, estados, valoraciones, asignaciones, cobertura, reglas, eventos, evidencias y auditoría. | Fuente oficial de la garantía. |
+| **Appian (BPM)** | Experiencia de procesos: tareas humanas, bandejas, aprobaciones y SLA de tareas. | Orquesta las tareas y **llama a las APIs de Garantías 360** para leer y escribir. Garantías 360 valida cada transición y cada regla. Los eventos de Garantías 360 inician o avanzan los procesos de Appian. |
+| **Flexcube** | Obligación financiera: saldo, mora, estado y datos del crédito. | Garantías 360 consume eventos o consultas de obligaciones y saldos, y **nunca los modifica**. |
+| **OnBase / DocCenter** | Custodia de documentos originales. | Garantías 360 guarda la referencia al documento en OnBase, sus metadatos y su **hash SHA-256**. |
+| **Azure Blob Storage (privado)** | Evidencias técnicas propias de Garantías 360. | Snapshots de cálculos, exportes, paquetes de evidencia y bitácoras con inmutabilidad (WORM). |
+| **FICO / Riesgo** | Decisión de crédito y cálculo final de riesgo (PDI, pérdida esperada). | Consume de Garantías 360 la cobertura, el valor admisible, la idoneidad y el tipo de garantía. |
+| **Aplicativos de producto** (hipotecario, vehículo, libranza, tarjeta de crédito, Banca Empresas…) | Flujo comercial de la solicitud. | Registran la garantía por API y consultan su estado y valores. |
+| **Externos** | Fasecolda, RGM (Confecámaras), ORIP/SNR, IGAC y gestores catastrales, RUNT, FNG, FNA, avaluadores, aseguradoras. | Integraciones propias de Garantías 360 (M20). |
 
----
-
-## 3. Contexto del sistema
+**Reglas de frontera:**
+- **R-01.** Un proceso de Appian no cambia el estado de una garantía directamente en base de datos. Siempre invoca una API de Garantías 360, que valida la transición y la registra en la auditoría.
+- **R-02.** Garantías 360 no guarda saldos como dato propio. Guarda la **copia fechada** del saldo usado en cada cálculo de cobertura (para reproducirlo) y concilia a diario con Flexcube.
+- **R-03.** Garantías 360 no custodia originales. Un documento está "completo" cuando existe en OnBase y su hash coincide.
+- **R-04.** La configuración propia de Garantías 360 (tipos de garantía, reglas, controles) tiene su maestro y su maker–checker **dentro de Garantías 360**, porque es gobierno del maestro y no proceso de negocio. **[SUPUESTO — validar con Appian]**
 
 ```mermaid
 flowchart LR
-  subgraph Origen["Aplicativos de producto"]
-    HIP[Crédito hipotecario]
-    VEH[Vehículo]
-    LIB[Libranza]
-    TC[Tarjeta de crédito]
-    OTR[Otros productos]
+  subgraph Producto["Aplicativos de producto"]
+    HIP[Hipotecario] --- VEH[Vehículo] --- LIB[Libranza] --- TC[Tarjeta de crédito] --- BE[Banca Empresas]
+  end
+  APP[Appian BPM<br/>tareas y aprobaciones]
+  G360((Garantías 360<br/>maestro))
+  FLX[Flexcube<br/>obligaciones y saldos]
+  OB[OnBase / DocCenter<br/>originales]
+  BLOB[(Azure Blob<br/>evidencias técnicas)]
+  FICO[FICO / Riesgo]
+  KAF[[Kafka<br/>backbone de eventos]]
+  SHI[(Shivam legado)]
+  subgraph Ext["Externos"]
+    FAS[Fasecolda] --- RGM[RGM Confecámaras] --- SNR[ORIP / SNR] --- IGAC[IGAC / catastro] --- RUNT[RUNT] --- FNG[FNG] --- FNA[FNA]
   end
 
-  CRE[Credicore<br/>motor de otorgamiento]
-  PG((Plataforma de<br/>Garantías))
-  KAF[[Kafka]]
-  SHI[(Shivam<br/>legado)]
-
-  subgraph Externos
-    FAS[Fasecolda<br/>guía de valores]
-    RGM[Confecámaras<br/>RGM]
-    IGAC[IGAC / gestores<br/>catastrales<br/>avalúo catastral]
-    SNR[SNR / ORIP<br/>VUR]
-    AVA[Firmas avaluadoras]
-    ASE[Aseguradoras]
-  end
-
-  CORE[Core bancario /<br/>Contabilidad]
-  RIE[Riesgos / Regulatorio]
-
-  HIP & VEH & LIB & TC & OTR -- "API registro / consulta" --> PG
-  CRE -- "consulta cobertura" --> PG
-  PG -- "eventos de garantía" --> KAF
-  KAF --> HIP & VEH & LIB & TC & OTR & CORE & RIE
-  SHI -. "migración" .-> PG
-  PG <--> FAS & RGM & IGAC & SNR
-  AVA -- "informes de avalúo" --> PG
-  ASE -- "pólizas / renovaciones" --> PG
+  Producto -- REST --> G360
+  APP -- REST --> G360
+  G360 -- eventos --> KAF
+  KAF -- eventos --> APP & FICO & Producto
+  FLX -- eventos de obligación --> KAF --> G360
+  G360 -- referencias y hash --> OB
+  G360 --> BLOB
+  G360 <--> Ext
+  SHI -. migración .-> G360
 ```
 
-**Principio rector:** la solicitud de crédito nace y se gestiona en el aplicativo de producto; en el momento en que el producto define la garantía, **registra** la garantía en esta plataforma vía API. A partir de ahí la plataforma es dueña del ciclo de vida de la garantía y notifica los cambios por Kafka y por API de consulta.
+---
+
+## 3. Marco normativo
+
+**Jurídica, Riesgos y Cumplimiento deben validar vigencia y alcance antes de aprobar.** Las normas se vuelven controles verificables en el módulo de Cumplimiento SFC (M13).
+
+| # | Norma | Qué exige a la plataforma | Módulos |
+|---|---|---|---|
+| N-01 | **Decreto 2555 de 2010**, art. 2.1.2.1.3 y ss. (garantías idóneas/admisibles) | Evaluar y conservar la idoneidad de cada garantía con criterios parametrizables: valor técnico y objetivo, eficacia jurídica, posibilidad de realización. | M04, M05, M08, M14 |
+| N-02 | **Circular Básica Contable y Financiera (CE 100/1995)** — Cap. XXXI (SIAR), anexo de riesgo de crédito y modelos de referencia de cartera | Información de garantías completa, actualizada y trazable; valor y su actualización periódica; tipo de garantía como insumo de la PDI; políticas de valoración, seguimiento y realización. | M07, M08, M10, M13 |
+| N-03 | **Ley 1676 de 2013** y **Decreto 1835 de 2015** (DUR 1074 de 2015) — Garantías mobiliarias | Inscripción, modificación, prórroga, cancelación y ejecución en el RGM; folio electrónico; cancelación al extinguirse la obligación. Cubre también **derechos económicos y de cobro** y sus mecanismos de ejecución (pago directo, ejecución especial). | M06, M11, M12, M20 |
+| N-04 | **Ley 1579 de 2012** (Estatuto de Registro de Instrumentos Públicos) | Hipotecas: escritura registrada en la ORIP, matrícula inmobiliaria, anotación de la hipoteca y de su cancelación, certificado de tradición. | M06, M12 |
+| N-05 | **Ley 1673 de 2013**, **Decreto 556 de 2014** y **Resolución IGAC 620 de 2008** | Avaluador con RAA vigente, informe de avalúo conservado, metodología identificada. | M07 |
+| N-06 | **Ley 546 de 1999** y normas de **seguros asociados a créditos hipotecarios** (Decreto 2555/2010, Libro 36, Tít. 2, Cap. 2; Decreto 673/2014) | Seguros de incendio y terremoto vigentes sobre inmuebles hipotecados, con el Banco como beneficiario oneroso. | M18 |
+| N-07 | **Guía de Valores Fasecolda** | Revaluación anual de vehículos. | M07 |
+| N-08 | **Circular Básica Jurídica (CE 029/2014), Parte I, Tít. IV, Cap. IV — SARLAFT** | Consulta en listas de propietarios y garantes no clientes, con evidencia. | M04 |
+| N-09 | **CBCF Cap. XXXI (SIAR) — riesgo operacional** y **CBJ Parte I, Tít. IV, Cap. V — ciberseguridad** | Trazabilidad, doble control, segregación de funciones, gestión de incidentes, continuidad. | M14, M15, M24 |
+| N-10 | **CE 005 de 2019 SFC** (computación en la nube) | Condiciones para operar en Azure: ubicación y cifrado de datos, acceso de la SFC, plan de salida y continuidad. Aplica también al modelo de IA del Asistente (M02). | RNF, §12 |
+| N-11 | **Ley 1581 de 2012**, Decreto 1377 de 2013; **Ley 1266 de 2008** | Finalidad, minimización, seguridad y derechos del titular sobre datos de deudores, propietarios y garantes. Solo datos sintéticos en ambientes no productivos. | M04, M02, M24, §15 |
+| N-12 | **Ley 1328 de 2009** (consumidor financiero) | Liberación oportuna, paz y salvo y entrega de documentos al extinguirse la obligación. | M12 |
+| N-13 | **Código de Comercio, art. 60**; **Ley 962 de 2005, art. 28** | Conservación por **10 años**. | M15, M19 |
+| N-14 | **Ley 527 de 1999**; **Decreto 2364 de 2012** | Validez de documentos electrónicos, firma electrónica e integridad (hash) de las evidencias. | M15, M19 |
+| N-15 | **CUIF** (cuentas de orden de garantías recibidas); **NIIF 9** | Insumos contables y de pérdida esperada. | M22 |
+| N-16 | **Ley 1527 de 2012** (libranza) | Identificación de la libranza y del pagador en garantías de ese producto. | M04 |
+| N-17 | Reglamentos del **FNG** y del **FAG** | Certificado, porcentaje de cobertura, vigencia, comisión y reclamación de la garantía. | M06, M08, M11 |
+| N-18 | **Ley 14 de 1983**; **Ley 1955 de 2019, arts. 79-82**; reglamentación técnica del **IGAC** | Avalúo catastral de inmuebles en garantía (NPN, vigencia, gestor catastral) y su reporte al IGAC o al gestor catastral. | M07, M20 |
+| N-19 | **Código Sustantivo del Trabajo, art. 256**, y **Ley 50 de 1990, art. 104** (pignoración de cesantías) | La pignoración de cesantías solo procede con **autorización escrita del trabajador** y para **créditos de vivienda**. Ver anexo C. | M05, M14, anexo C |
+| N-20 | **Ley 432 de 1998** (FNA) y el **reglamento de cesantías vigente del FNA** (Acuerdos de Junta Directiva) | Pignoración de cesantías a favor de entidades autorizadas por ley, siempre que no exista una pignoración vigente con el FNA; envío al FNA de la copia de la libranza o del pagaré; efectividad al retiro definitivo. Ver anexo C. | M06, M12, M20 |
+| N-21 | **Ley 769 de 2002** (Código Nacional de Tránsito) y **RUNT** | Anotación de la garantía o prenda en el registro del vehículo y su levantamiento. **[Validar con Jurídica la articulación con la inscripción en el RGM.]** | M06, M12 |
+| N-22 | **Decreto 1297 de 2022** (finanzas abiertas) y reglamentación de la SFC | Principio de diseño para las APIs: contratos estándar, versionados, seguros y documentados. Las APIs de Garantías 360 son internas, así que no aplica como obligación de intercambio con terceros. | §11 |
+| N-23 | **Política nacional de inteligencia artificial** (CONPES vigente) y principios de la SFC sobre uso de IA **[validar vigencia]** | IA explicable, auditable, con supervisión humana y sin decisiones automatizadas de crédito. | M02 |
 
 ---
 
-## 4. Actores y roles
+## 4. Actores, roles y segregación de funciones
 
-| Rol | Descripción | Capacidades principales |
-|---|---|---|
-| **Administrador** | Responsable funcional de la plataforma. | Configurar tipos de garantía y campos, parámetros de valoración, catálogos, reglas de alertas, usuarios y roles; aprobar cargas masivas. No aprueba operaciones que él mismo registró. |
-| **Gestor** | Operador del back office de garantías. | Registrar y completar garantías, adjuntar documentos, gestionar perfeccionamiento, registrar avalúos y pólizas, atender alertas, solicitar liberaciones y sustituciones. |
-| **Director** | Nivel de aprobación y supervisión. | Aprobar (checker) operaciones sensibles: liberación, sustitución, cambio de valor por encima del umbral, ejecución y cargas masivas; tableros de gestión. |
-| **Consultor** | Usuario de solo lectura (comercial, Riesgos, Auditoría, Control Interno). | Consultar garantías, expedientes, historial y reportes según su alcance de datos. |
-| **Sistema de producto** | Aplicativo de origen (cliente técnico). | Registrar garantías, actualizar datos en estados permitidos, consultar estado y valores. |
-| **Credicore** | Motor de otorgamiento (cliente técnico). | Consultar garantías y cobertura disponible del cliente. |
+La autorización se compone de **área funcional × nivel**. Los niveles son los que definió el negocio: Administrador, Gestor, Director y Consultor.
 
-**[SUPUESTO]** Los roles se asignan desde Microsoft Entra ID (grupos) y pueden restringirse por alcance: regional, oficina, producto o tipo de garantía.
+| Área \ Nivel | Consultor (lectura) | Gestor (registra y opera) | Director (aprueba) |
+|---|---|---|---|
+| **Operaciones** | Consulta garantías y expedientes | Registro, constitución, valoraciones, pólizas, liberación | Aprueba liberaciones, sustituciones y cambios de valor sobre el umbral |
+| **Jurídica** | Consulta estudios | Estudio jurídico, conceptos, hallazgos, condicionamientos | Aprueba el concepto jurídico final y el inicio de la ejecución |
+| **Riesgos** | Cobertura y tableros | Simula cobertura y propone reglas | Aprueba reglas (**Aprobador de reglas**) |
+| **Comercial** | Garantías de sus clientes (alcance restringido) | — | — |
+| **Cumplimiento** | Controles SFC y auditoría | Gestiona brechas y planes de remediación | Aprueba el cierre de brechas |
+| **Auditor** | **Lectura total**, incluida la auditoría y las evidencias; sin permisos de escritura | — | — |
+| **Administrador funcional** | — | Configura tipos de garantía, catálogos, controles y parámetros | Aprueba la publicación de configuración hecha por otro administrador |
 
-### 4.1 Operaciones que requieren doble control (maker–checker)
-| Operación | Maker | Checker |
-|---|---|---|
-| Liberación / cancelación de garantía | Gestor | Director |
-| Sustitución de garantía | Gestor | Director |
-| Cambio manual de valor > umbral parametrizable (p. ej., ±10 %) | Gestor | Director |
-| Inicio de ejecución | Gestor | Director |
-| Carga masiva | Gestor / Administrador | Director / Administrador distinto |
-| Publicación de un nuevo tipo de garantía o nueva versión | Administrador | Otro Administrador o Director |
+**Segregación de funciones (obligatoria):**
+- Quien crea o modifica no aprueba (reglas, configuración, liberación, cambios de valor, ejecución).
+- El Administrador funcional no opera garantías.
+- El Auditor no escribe.
+- Los permisos se aplican **en la API** de Garantías 360, no solo en la interfaz ni en Appian.
+- Los roles vienen de grupos de Microsoft Entra ID, con alcance de datos por segmento, regional, producto o cartera asignada.
+
+**Clientes técnicos:** aplicativos de producto, Appian, FICO y procesos batch, cada uno con credenciales propias y permisos mínimos.
 
 ---
 
-## 5. Requisitos funcionales
+## 5. Mapa de módulos (navegación)
 
-Prioridad: **MVP** = primera versión productiva; **F2/F3** = fases posteriores.
-
-### M1 — Catálogo configurable de tipos de garantía
-
-> **Referencia:** este módulo reutiliza el modelo del motor de parametrización de la plataforma **Proceder** (`genesis-247/factory-plataforma-proceder-legal`, RF-03, migraciones 0003 y 0009–0012). Allí ya se resolvieron problemas que aquí van a aparecer igual: versionamiento sin afectar lo que está en curso, renombrar sin reescribir registros y catálogos documentales no retroactivos. Las diferencias necesarias para garantías están marcadas como **[Garantías]**.
-
-**Modelo de configuración (heredado de Proceder):**
-
-| Elemento | Proceder | Plataforma de Garantías |
+| Menú | Módulo | Prioridad |
 |---|---|---|
-| Unidad configurable | Tipo de servicio | Tipo de garantía |
-| Catálogo de campos | `campos_catalogo`: campos **reutilizables** entre tipos | Igual |
-| Asociación campo–tipo | `campo_tipo_servicio`: obligatoriedad, orden y grupo **por tipo** | Igual; la obligatoriedad además puede depender del estado **[Garantías]** |
-| Tipos de dato | texto corto, texto largo, número, fecha, selección única | Los mismos + moneda, booleano, selección múltiple, referencia a catálogo maestro (DIVIPOLA, Fasecolda, aseguradoras…) **[Garantías]** |
-| Opciones de listas | Cada opción con `id` estable; se inactiva, nunca se borra | Igual |
-| Flujo de estados | Versionado e inmutable; `estado_logico_id` estable; validación de camino a estado final | Igual, pero cada estado configurable se **mapea a un macroestado regulatorio fijo** **[Garantías]** |
-| Documentos por tipo | Vigencia temporal (tipo SCD2), no retroactiva | Igual |
-| Almacenamiento | Columnas relacionales para campos transversales + JSONB para campos particulares | Igual |
+| **Operación** | M01 Resumen — Centro de mando de riesgo crediticio | MVP |
+| | M02 Asistente IA / Copiloto de garantías | F2 |
+| | M03 Ciclo de vida | MVP |
+| | M04 Garantías (registro maestro + Expediente 360) | MVP |
+| | M05 Estudio jurídico | MVP |
+| | M06 Constitución y registro | MVP |
+| | M07 Valoraciones | MVP |
+| | M08 Cobertura | MVP |
+| | M09 Core transaccional | MVP |
+| | M10 Monitoreo | MVP |
+| | M11 Ejecución | MVP (básico) / F2 |
+| | M12 Liberación | MVP |
+| **Gobierno** | M13 Cumplimiento SFC | MVP (controles e indicadores) / F2 (remediación) |
+| | M14 Reglas | MVP |
+| | M15 Auditoría | MVP |
+| **Administración** | M16 Configuración de tipos de garantía | MVP |
+| | M17 Registro por API y carga masiva | MVP |
+| | M18 Seguros | MVP |
+| | M19 Documentos y evidencias | MVP |
+| | M20 Integraciones externas | MVP (manual + archivo) / F2 (automáticas) |
+| | M21 Eventos Kafka | MVP |
+| | M22 Reportes | MVP |
+| | M23 Migración Shivam | MVP |
+| | M24 Seguridad y administración | MVP |
+
+La interfaz tiene barra lateral con estos grupos, encabezado con buscador global (ID de garantía, cliente, obligación, matrícula, placa), migas de pan, tarjetas de indicadores, tablas avanzadas con filtros y exportación, gráficas, líneas de tiempo, estados con color, alertas, paneles laterales y modales. Todos los módulos comparten el mismo sistema de diseño, basado en el **manual de marca oficial de Banco Popular** (P-19).
+
+---
+
+## 6. Requisitos funcionales
+
+### M01 — Resumen: Centro de mando de riesgo crediticio
+
+Mensaje principal: *"Control integral del respaldo, desde la originación hasta la liberación."*
+Mensaje complementario: *"Una vista única para anticipar brechas, explicar cada cálculo y tomar decisiones con evidencia verificable."*
+
+| ID | Requisito | Prioridad |
+|---|---|---|
+| RF-0101 | Tablero con los indicadores de la tabla siguiente, filtrables por segmento, producto, tipo de garantía, regional y fecha de corte. | MVP |
+| RF-0102 | Cada indicador es **explicable**: al hacer clic muestra su fórmula, la fecha de corte, la versión de la regla o fórmula y el listado de garantías que lo componen. | MVP |
+| RF-0103 | Evolución de la cobertura de los últimos 12 meses (a partir de los cálculos versionados de M08) y composición del respaldo por tipo de garantía y segmento. | MVP |
+| RF-0104 | Lista de "Casos que requieren atención", priorizada por criticidad (desde M10). | MVP |
+
+| Indicador | Fórmula propuesta **[validar con Riesgos]** |
+|---|---|
+| Valor total de garantías | Σ valor comercial vigente de las garantías activas (COP, con la TRM de la fecha de corte) |
+| Garantías activas | Conteo de garantías en los macroestados *Activa*, *En monitoreo* o *En ejecución* |
+| Exposición cubierta | Σ valor asignado ÷ Σ exposición de las obligaciones con garantía |
+| Cobertura idónea | Σ valor asignado de garantías idóneas ÷ Σ exposición |
+| Garantías condicionadas / no idóneas | Conteo y valor por resultado de idoneidad (M14) |
+| Valoraciones próximas a vencer | Conteo con próxima valoración ≤ N días (parámetro; por defecto 30) |
+| Brechas críticas | Conteo de obligaciones con brecha de cobertura > umbral crítico (regla) |
+| Cumplimiento normativo | Nivel ponderado de cumplimiento de los controles de M13 |
+| Alertas | Alertas abiertas por criticidad (M10) |
+| **Índice de salud del portafolio** | Promedio ponderado (0–100) de: % de obligaciones que alcanzan su cobertura objetivo, % de valoraciones vigentes, % de documentación completa, % de pólizas vigentes, % de garantías perfeccionadas y % sin alertas críticas. Los pesos se definen en una regla versionada (M14). |
+
+### M02 — Asistente IA / Copiloto de garantías (F2)
+
+**Principio crítico:** la IA **no ejecuta decisiones crediticias ni modifica garantías**. Consulta, resume, explica, identifica evidencias, cita fuentes, facilita la navegación y recomienda acciones para revisión humana.
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-101 | El Administrador puede **crear, editar, versionar e inactivar tipos de garantía** desde la interfaz, sin despliegue de código. Al inactivar un tipo con garantías vigentes, el sistema muestra una advertencia no bloqueante con el conteo afectado. | MVP | N-01, N-02 |
-| RF-102 | Cada tipo tiene **atributos de comportamiento**: clase (real inmueble, mobiliaria, vehículo, fiduciaria, fondo de garantías, personal, depósito/CDT, pignoración de rentas, otra), si es admisible por defecto, si requiere avalúo comercial, si requiere avalúo catastral, método y periodicidad de revaluación, registro público requerido (RGM, ORIP, ninguno), si requiere póliza, porcentaje de admisibilidad, si puede ser abierta o cerrada, y si permite respaldar varias obligaciones. | MVP | N-01, N-02 |
-| RF-103 | **Catálogo reutilizable de campos personalizados**: código (inmutable, sin colisión con los campos transversales reservados), etiqueta, tipo de dato, opciones (para listas), validaciones (rango, expresión regular, longitud), ayuda contextual y estado activo/inactivo. | MVP | — |
-| RF-104 | **Asociación campo–tipo de garantía**: por cada tipo se define qué campos del catálogo usa, su **obligatoriedad** (por tipo, y opcionalmente por estado: p. ej., "número de escritura" obligatorio solo para pasar a *Constituida*), su orden y su grupo o sección en el formulario. | MVP | — |
-| RF-105 | Las opciones de un campo de lista tienen **identificador estable**; la garantía guarda el identificador, no el texto. Renombrar una opción no requiere reescribir garantías; "eliminar" una opción es inactivarla. | MVP | N-09 |
-| RF-106 | Los **campos transversales** (id, tipo, versión, estado, valor vigente, fecha de avalúo, moneda, llave natural, aplicativo de origen, fechas de auditoría) son columnas relacionales indexadas y están siempre disponibles; los campos particulares se guardan en JSONB validado contra el esquema de la versión del tipo. | MVP | N-02 |
-| RF-107 | **Versionamiento no retroactivo**: modificar campos, obligatoriedad, flujo o documentos de un tipo en uso crea una versión nueva; las garantías existentes conservan la versión con la que se crearon. Un campo obligatorio nuevo no invalida garantías en curso. | MVP | N-09 |
-| RF-108 | **Flujo de estados configurable por tipo** (estados y transiciones permitidas), versionado e inmutable, con identidad estable de cada estado a través de las versiones (estado lógico). Si se elimina un estado que tiene garantías, el sistema exige indicar a qué estado se mueven antes de publicar la versión. | MVP | N-09 |
-| RF-109 | **Validación del flujo**: el sistema rechaza guardar un flujo en el que algún estado no tenga camino hacia un estado final. Las transiciones de retorno explícitas (p. ej., *Devuelta* → *En revisión*) se permiten. | MVP | — |
-| RF-110 | **[Garantías]** Cada estado configurable se **mapea a un macroestado regulatorio fijo** (sección M3). Así los reportes, la cobertura, los eventos Kafka y las integraciones funcionan igual para todos los tipos, aunque cada tipo tenga su propio flujo detallado. | MVP | N-02 |
-| RF-111 | **Tipos de documento por tipo de garantía**, cada uno obligatorio u opcional (y opcionalmente, obligatorio a partir de cierto estado), con vigencia temporal: los cambios aplican solo a garantías nuevas. | MVP | N-13 |
-| RF-112 | Los campos y documentos configurados se **exponen automáticamente** en la API (JSON Schema por tipo y versión), el formulario web dinámico, la plantilla de carga masiva y los reportes. El formulario se arma en < 3 s. | MVP | — |
-| RF-113 | El catálogo inicial precargado incluye como mínimo: hipoteca (vivienda / no vivienda), garantía mobiliaria sobre vehículo, garantía mobiliaria sobre otros bienes (inventarios, maquinaria, derechos económicos), pignoración de CDT/depósitos, FNG, FAG, fiducia en garantía, pignoración de rentas, aval/codeudor y pagaré (no admisible). | MVP | N-01, N-17 |
-| RF-114 | Toda la configuración (crear, versionar, publicar) queda en la bitácora de auditoría, y la publicación de una versión requiere doble control (sección 4.1). | MVP | N-09 |
-| RF-115 | **Reglas de negocio configurables** por tipo (p. ej., "si el vehículo tiene más de 10 años, requiere avalúo físico"), con un motor de reglas declarativo. | F2 | — |
-| RF-116 | Catálogos maestros administrables: departamentos/municipios (DIVIPOLA), tipos de documento de identidad, aseguradoras, firmas avaluadoras, notarías, ORIP, gestores catastrales, líneas y marcas Fasecolda, monedas y productos de origen. | MVP | — |
+| RF-0201 | Preguntas en lenguaje natural sobre garantías, coberturas, valoraciones, documentos, reglas y alertas. Ejemplos: *"¿Por qué esta garantía tiene 86 % de cobertura?"*, *"¿Qué avalúos vencen en 30 días?"*. | F2 | — |
+| RF-0202 | **Solo lectura:** el asistente usa exclusivamente las APIs de consulta de Garantías 360, **con los permisos del usuario que pregunta** (token en nombre del usuario). No ve más que el usuario. | F2 | N-09, N-11 |
+| RF-0203 | Cada respuesta **cita sus fuentes**: garantía, cálculo y versión, regla y versión, documento y hash, con enlace. Si no hay fuente, responde que no sabe. | F2 | N-23 |
+| RF-0204 | Las explicaciones de cobertura se generan a partir de la **traza del cálculo** (anexo A), no se infieren. | F2 | — |
+| RF-0205 | Las recomendaciones se presentan como sugerencias con un botón que lleva a la acción en Appian o Garantías 360. Nunca se ejecutan solas. | F2 | N-23 |
+| RF-0206 | Auditoría de cada interacción: usuario, pregunta, fuentes consultadas, respuesta, modelo y versión, Correlation ID. | F2 | N-09 |
+| RF-0207 | El modelo se despliega en el tenant de Azure del Banco (región aprobada), sin uso de los datos para entrenamiento, con protección contra instrucciones incrustadas en documentos (los documentos se tratan como datos) y con minimización de datos personales. | F2 | N-10, N-11 |
+| RF-0208 | Un conjunto de evaluación versionado (preguntas con respuestas esperadas) se ejecuta antes de cada cambio de modelo o de prompt. | F2 | N-23 |
 
-### M2 — Registro de garantías
+### M03 — Ciclo de vida
 
-| ID | Requisito | Prioridad | Norma |
-|---|---|---|---|
-| RF-201 | **API de registro** (REST) para los aplicativos de producto: crea la garantía con tipo, campos comunes, campos personalizados, propietarios/garantes, obligaciones vinculadas (número de solicitud u obligación), aplicativo de origen y documentos. | MVP | — |
-| RF-202 | La API es **idempotente** (encabezado `Idempotency-Key`) y responde el identificador único de la garantía y su estado. | MVP | N-09 |
-| RF-203 | Validación sincrónica contra el esquema del tipo/versión, con errores estructurados por campo. | MVP | — |
-| RF-204 | Detección de **duplicados** por llave natural configurable por tipo (p. ej., matrícula inmobiliaria; placa + VIN; número de CDT; certificado FNG). Si el bien ya respalda otra obligación, se vincula (garantía abierta o compartida) en lugar de duplicarse, según las reglas del tipo. | MVP | N-02 |
-| RF-205 | **Captura manual** en la interfaz web, con formulario dinámico generado desde el tipo de garantía. | MVP | — |
-| RF-206 | **Carga masiva** con un asistente de 4 pasos (patrón de Proceder, RF-17): (1) elegir el tipo de garantía y descargar su plantilla, generada desde la versión vigente; (2) cargar el archivo CSV/XLSX y validar tamaño y estructura; (3) validación previa con reporte de errores por fila (fila, campo, motivo), exportable; las filas que coinciden con una garantía existente se marcan como "actualizará registro existente" y requieren confirmación explícita aparte; (4) confirmación y aprobación maker–checker. El procesamiento es asíncrono y el resultado indica filas cargadas y rechazadas. | MVP | N-09 |
-| RF-206a | La carga masiva neutraliza la inyección de fórmulas (celdas que empiezan por `=`, `+`, `-` o `@` se tratan como texto), tiene límites de tamaño, filas, tiempo y memoria, y deja un historial auditable (usuario, fecha, archivo, tipo, filas cargadas y rechazadas). | MVP | N-09 |
-| RF-207 | Actualización vía API de los datos de la garantía únicamente en estados que lo permitan (p. ej., antes de *Constituida*); después, los cambios se hacen por novedad controlada. | MVP | N-09 |
-| RF-208 | Registro alterno por **consumo de eventos Kafka** publicados por los aplicativos de producto (patrón asíncrono además del REST). | F2 | — |
-
-### M3 — Ciclo de vida y estados
+**Macroestados fijos** (comunes a todos los tipos; cada tipo mapea sus estados configurables a ellos, ver M16):
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Registrada: API / manual / masiva
-  Registrada --> EnConstitucion: documentación completa
-  EnConstitucion --> Constituida: perfeccionada (registro público / firma)
-  EnConstitucion --> Anulada: crédito no desembolsado / desistimiento
-  Registrada --> Anulada
-  Constituida --> Vigente: vinculada a obligación desembolsada
-  Vigente --> Vigente: revaluación / cambio de póliza / novedad
-  Vigente --> EnSustitucion: solicitud de sustitución
-  EnSustitucion --> Vigente
-  Vigente --> EnLiberacion: obligación(es) pagada(s) o solicitud
-  EnLiberacion --> Liberada: cancelación registrada (ORIP / RGM)
-  Vigente --> EnEjecucion: incumplimiento
-  EnEjecucion --> Ejecutada: adjudicación / pago / dación
-  EnEjecucion --> Vigente: normalización
-  Liberada --> [*]
-  Ejecutada --> [*]
+  [*] --> Solicitud
+  Solicitud --> Registro
+  Registro --> EstudioJuridico
+  EstudioJuridico --> Constitucion: aprobada / condicionada
+  EstudioJuridico --> Anulada: rechazada
+  Constitucion --> Perfeccionamiento
+  Perfeccionamiento --> Activa: registro confirmado + obligación desembolsada
+  Activa --> Monitoreo
+  Monitoreo --> Actualizacion: revaluación / novedad
+  Actualizacion --> Monitoreo
+  Monitoreo --> Ejecucion: incumplimiento
+  Ejecucion --> Monitoreo: normalización
+  Ejecucion --> Cierre: recuperación finalizada
+  Monitoreo --> Liberacion: obligaciones canceladas / decisión del Banco
+  Liberacion --> Cierre
+  Registro --> Anulada: desistimiento
+  Cierre --> [*]
   Anulada --> [*]
 ```
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-301 | Los estados del diagrama son los **macroestados regulatorios fijos**. Cada tipo de garantía define su propio flujo detallado (RF-108) y cada estado de ese flujo se mapea a uno de estos macroestados (RF-110). Ejemplo para hipoteca: *Minuta enviada*, *Escritura firmada* y *En registro ORIP* → macroestado *En constitución*. | MVP | N-02 |
-| RF-302 | Cada transición registra: usuario o sistema, fecha y hora, motivo, soporte documental y aprobador (cuando aplica maker–checker). | MVP | N-09 |
-| RF-303 | **Perfeccionamiento**: checklist por tipo (p. ej., hipoteca: minuta → escritura → boleta fiscal → registro ORIP → certificado de tradición con anotación). La garantía no pasa a *Constituida* sin los ítems obligatorios. | MVP | N-03, N-04 |
-| RF-304 | **Liberación**: cuando todas las obligaciones respaldadas están canceladas (evento del core o del producto), se genera automáticamente una tarea de liberación, con un SLA parametrizable, para emitir los documentos de cancelación y, en el caso de mobiliarias, el formulario de cancelación en el RGM. | MVP | N-03, N-12 |
-| RF-305 | **Sustitución y liberación parcial** de garantías, con validación de cobertura remanente. | F2 | N-02 |
-| RF-306 | **Ejecución**: registro del proceso (judicial, pago directo o ejecución especial — Ley 1676, arts. 58-60), abogado, juzgado, radicado, etapas, costos, valor recuperado y bien recibido en dación o adjudicación. | F2 | N-03 |
-| RF-307 | Transiciones automáticas disparadas por eventos externos (desembolso, cancelación de obligación, castigo). | MVP | — |
+| RF-0301 | Visualización gráfica del ciclo de vida de cada garantía: etapa actual, etapas completadas, responsable, SLA (cumplido, en riesgo, vencido), fechas, documentos y eventos de cada etapa. | MVP | N-02 |
+| RF-0302 | Toda transición se hace por **API de Garantías 360** (invocada por Appian, por un aplicativo o por un usuario autorizado). Se valida contra el flujo del tipo y sus reglas, y deja: actor, fecha y hora, motivo, evidencia, aprobador (si aplica) y Correlation ID. | MVP | N-09 |
+| RF-0303 | Los **responsables y SLA de tareas** se sincronizan desde Appian por evento. La vista enlaza a la tarea en Appian. | MVP | — |
+| RF-0304 | Transiciones automáticas por eventos: desembolso (Flexcube) → *Activa*; cancelación total de obligaciones → inicia *Liberación*; mora > umbral (regla) → alerta y propuesta de *Ejecución* (no automática). | MVP | N-12 |
+| RF-0305 | Vista de ciclo de vida del portafolio: embudo por etapa, tiempos promedio y garantías con SLA vencido. | MVP | — |
 
-### M4 — Vinculaciones: obligaciones, propietarios y garantes
+### M04 — Garantías: registro maestro y Expediente 360
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-401 | Relación **N:M** garantía–obligación, con valor o porcentaje asignado a cada obligación y control de que la suma asignada no supere el valor admisible de la garantía. | MVP | N-02 |
-| RF-402 | Soporte para garantías **abiertas** (respaldan todas las obligaciones del deudor hasta un tope) y **cerradas**. | MVP | N-02 |
-| RF-403 | Registro de **propietarios/constituyentes** y **garantes** (persona natural o jurídica, tipo y número de documento, porcentaje de propiedad), distinguiéndolos del deudor. | MVP | — |
-| RF-404 | Consulta **SARLAFT** en listas para terceros no clientes, invocando el servicio de listas del Banco y guardando la evidencia de la consulta. | F2 **[SUPUESTO: en el MVP la consulta la hace el aplicativo de producto]** | N-08 |
-| RF-405 | Cálculo de **cobertura** por obligación y por cliente: valor de la garantía, valor admisible, valor asignado, saldo (del core) e indicador de cobertura. | MVP | N-02 |
-| RF-406 | Tratamiento de datos personales conforme a la finalidad autorizada; enmascaramiento de datos sensibles según el rol. | MVP | N-11 |
+| RF-0401 | Cada garantía tiene un **UUID técnico** y un **identificador de negocio** con formato `GAR-AAAA-NNNNNN` (p. ej., GAR-2026-004901), consecutivo por año, inmutable. | MVP | — |
+| RF-0402 | **Campos mínimos del maestro:** tipo de garantía; cliente e identificación; obligación(es) asociada(s); producto; segmento; estado (macroestado + estado del tipo); fechas de creación, constitución y perfeccionamiento; vigencia; valor comercial; valor admisible; valor neto; cobertura; moneda; avalúo vigente; pólizas; documentos; propietarios; beneficiarios; obligaciones relacionadas; fuente de información (API de producto, carga masiva, migración Shivam, manual); **estado jurídico** (sin estudio, en estudio, con observaciones, condicionada, aprobada, rechazada); **estado documental** (completo, incompleto, con documentos vencidos); fecha de la próxima valoración; idoneidad (idónea, condicionada, no idónea) con la regla y la versión que la determinaron. | MVP | N-01, N-02 |
+| RF-0403 | Relación **N:M garantía–obligación**: una garantía respalda varias obligaciones y una obligación tiene varias garantías. Cada vínculo tiene tipo (cerrada/específica o abierta), tope, prioridad, porcentaje o valor pactado (opcional) y vigencia. | MVP | N-02 |
+| RF-0404 | Garantías **compartidas** con otros acreedores o con grados de hipoteca: se registra el acreedor, el grado o prelación y el valor comprometido, que se descuenta en el valor neto. | MVP | N-02 |
+| RF-0405 | **Participantes:** propietarios o constituyentes, garantes, deudores y beneficiarios, con porcentaje de propiedad. Consulta SARLAFT de los no clientes por el servicio de listas del Banco, con evidencia. | MVP (datos) / F2 (SARLAFT) | N-08, N-11 |
+| RF-0406 | Detección de duplicados por llave natural configurable por tipo (matrícula inmobiliaria, placa + VIN, número de CDT, certificado FNG, contrato de derechos de cobro, identificación del afiliado en el FNA). | MVP | N-02 |
+| RF-0407 | Búsqueda avanzada y listado con filtros combinables, columnas configurables, exportación (respetando permisos) y vistas guardadas. | MVP | — |
+| RF-0408 | **Expediente 360:** página por garantía, con pestañas: Resumen · Cliente y participantes · Obligaciones · Cobertura · Valoraciones · Documentos · Seguros · Jurídico (estudio, constitución, registros) · Eventos · Alertas · Reglas ejecutadas · Auditoría · Histórico (versiones del maestro) · Evidencias. | MVP | N-02, N-09 |
+| RF-0409 | **Vista 360 por obligación y por cliente:** todas las garantías que respaldan una obligación o a un cliente, con su cobertura consolidada. | MVP | N-02 |
+| RF-0410 | Versionamiento del registro maestro: cada cambio crea una versión consultable ("cómo estaba la garantía el día X"). | MVP | N-09 |
 
-### M5 — Valoración, avalúos y revaluación
-
-| ID | Requisito | Prioridad | Norma |
-|---|---|---|---|
-| RF-501 | Registro de **avalúos**: fecha, tipo (comercial, catastral, guía de valores, índice), valor, moneda, avaluador (nombre, RAA, firma avaluadora), metodología, vigencia e informe adjunto. Se conserva el histórico completo. | MVP | N-05 |
-| RF-502 | Cada garantía expone el **valor vigente**, la **fecha del último avalúo**, la **fuente** y la **fecha de la próxima revaluación**. | MVP | N-02 |
-| RF-503 | **Revaluación automática de vehículos con Fasecolda**: proceso anual (y bajo demanda) que carga la Guía de Valores (archivo o servicio), cruza por código Fasecolda y modelo, actualiza el valor y deja la traza. Los vehículos sin coincidencia pasan a una bandeja de gestión. | MVP | N-07 |
-| RF-504 | **Actualización del valor de inmuebles** por el método parametrizado (índice, p. ej., IVP del DANE o valor catastral, o nuevo avalúo técnico según la periodicidad definida por Riesgos). | F2 **[SUPUESTO]** | N-02, N-05 |
-| RF-505 | Cálculo del **valor admisible** = valor vigente × porcentaje de admisibilidad del tipo (parametrizable), con los descuentos por antigüedad del avalúo que defina Riesgos. | MVP | N-01, N-02 |
-| RF-506 | Alertas de **avalúo vencido** o próximo a vencer, según la periodicidad de cada tipo. | MVP | N-02 |
-| RF-508 | **Avalúo catastral de inmuebles**: por cada inmueble en garantía se registra el Número Predial Nacional, el gestor catastral competente (IGAC o gestor habilitado del municipio), el valor del avalúo catastral, la vigencia (año) y el soporte. Se conserva el histórico por vigencia, separado del avalúo comercial. | MVP | N-18 |
-| RF-509 | Actualización anual del avalúo catastral: carga masiva o consulta al gestor catastral al inicio de cada vigencia, con alerta de los inmuebles sin avalúo catastral de la vigencia actual. | MVP / F2 | N-18 |
-| RF-507 | Integración con firmas avaluadoras para solicitar avalúos y recibir informes de forma electrónica. | F3 | N-05 |
-
-### M6 — Pólizas de seguro
+### M05 — Estudio jurídico
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-601 | Registro de las pólizas asociadas a la garantía: aseguradora, número, ramo (incendio y terremoto, todo riesgo vehículo, otros), valor asegurado, vigencia, beneficiario oneroso y si es colectiva del Banco o endosada. | MVP | N-06 |
-| RF-602 | Alertas de vencimiento o no renovación y de valor asegurado inferior al valor de la garantía. | MVP | N-06 |
-| RF-603 | Carga masiva o integración con aseguradoras para renovaciones de pólizas colectivas. | F2 | N-06 |
+| RF-0501 | Estudio jurídico por garantía con: tipo, cliente, documentación analizada, **checklist jurídico por tipo** (configurable en M16), resultado, observaciones, concepto jurídico, hallazgos, condicionamientos, responsable, fechas y evidencias. | MVP | N-01, N-03, N-04 |
+| RF-0502 | Estados: **Pendiente → En estudio → Con observaciones ↔ En estudio → Aprobada / Aprobada con condicionamientos / Rechazada**. La tarea se ejecuta en Appian; Garantías 360 guarda el contenido y valida la transición. | MVP | — |
+| RF-0503 | **Hallazgos** con severidad (crítico, mayor, menor) y **condicionamientos** con descripción, responsable, fecha límite y evidencia de cumplimiento. Mientras haya condicionamientos abiertos, la garantía es *condicionada* y no idónea (regla). | MVP | N-01 |
+| RF-0504 | Ejemplos de checklist: **inmueble** — títulos a 10 años o más, certificado de tradición reciente, limitaciones al dominio, afectación a vivienda familiar o patrimonio de familia, embargos; **vehículo** — historial en el RUNT, prendas previas, comparendos; **derechos de cobro** — contrato fuente, cesibilidad, notificación al deudor cedido; **cesantías FNA** — autorización escrita del trabajador, destino de vivienda, ausencia de pignoración vigente con el FNA (anexo C). | MVP | N-19, N-20 |
+| RF-0505 | El concepto jurídico aprobado exige una aprobación de nivel Director de Jurídica distinto de quien elaboró el estudio. | MVP | N-09 |
+| RF-0506 | Tablero de estudios por estado, abogado, antigüedad y SLA. | MVP | — |
 
-### M7 — Registros públicos y fuentes externas
-
-| ID | Requisito | Prioridad | Norma |
-|---|---|---|---|
-| RF-701 | **Garantías mobiliarias — RGM (Confecámaras)**: registrar número de folio electrónico, fecha y tipo de formulario (inicial, modificación, prórroga, cancelación, ejecución). En el MVP el registro es manual con soporte adjunto; integración automática en F2. | MVP / F2 | N-03 |
-| RF-702 | **Inmuebles — ORIP / SNR**: registrar la matrícula inmobiliaria, el número de escritura, la notaría, la fecha y la anotación; adjuntar el certificado de tradición. Consulta automática de certificados (VUR o servicio disponible) en F2. | MVP / F2 | N-04 |
-| RF-703 | **Reporte del avalúo catastral de inmuebles al IGAC / gestor catastral**: generación del reporte (archivo o servicio) de los inmuebles en garantía con NPN, matrícula inmobiliaria, dirección, municipio, avalúo catastral y vigencia, en el formato y la periodicidad que se definan. El formato es configurable. Cada envío queda con su constancia, los rechazos pasan a una bandeja de corrección y se permite reprocesar. En el MVP se genera el archivo y se registra el envío; la transmisión automática va en F2. | MVP / F2 | N-18 |
-| RF-704 | Cada integración externa registra la solicitud, la respuesta, los errores y los reintentos (bitácora de interoperabilidad). | MVP | N-09 |
-
-### M8 — Expediente documental
+### M06 — Constitución y registro
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-801 | Expediente digital por garantía, con documentos tipificados (escritura, certificado de tradición, avalúo, póliza, formulario RGM, tarjeta de propiedad, pagaré, etc.) y los obligatorios según el tipo y el estado. | MVP | N-13, N-14 |
-| RF-802 | Almacenamiento en Azure Blob Storage con **política de inmutabilidad (WORM)** y retención mínima de 10 años desde la liberación; hash de integridad por documento. | MVP | N-13, N-14 |
-| RF-803 | Versionamiento de documentos y visor en línea (PDF / imágenes). | MVP | — |
-| RF-804 | Integración con el gestor documental corporativo, si existe. | F2 **[SUPUESTO]** | — |
+| RF-0601 | Cada tipo de garantía tiene una **plantilla de actividades de perfeccionamiento** configurable (M16). Al aprobarse el estudio jurídico se genera el plan de actividades de la garantía. | MVP | N-03, N-04 |
+| RF-0602 | Cada actividad tiene responsable, fecha límite, estado (pendiente, en curso, completada, bloqueada, no aplica), evidencia (referencia a OnBase + hash) y datos específicos (número de escritura, notaría, radicado, folio, etc.). | MVP | N-14 |
+| RF-0603 | Actividades del catálogo inicial: firma de documentos; escritura pública; pago de derechos de registro y boleta fiscal; radicación y registro en la ORIP; inscripción en el RGM (formulario inicial); anotación en el organismo de tránsito o RUNT; inscripción en la Cámara de Comercio cuando aplique; confirmación o expedición del certificado FNG; confirmación de la pignoración por el FNA; constitución o endoso de pólizas; notificación al deudor cedido (derechos de cobro); constitución del contrato de fiducia y certificado de garantía. | MVP | N-03, N-04, N-17, N-20, N-21 |
+| RF-0604 | La garantía pasa a *Perfeccionamiento completado* solo con todas las actividades obligatorias completadas y con evidencia. | MVP | N-01 |
+| RF-0605 | Las tareas humanas se ejecutan en Appian. Garantías 360 expone el plan, recibe el avance por API y publica `GarantiaPerfeccionada`. | MVP | — |
 
-### M9 — Alertas, tareas y bandejas
-
-| ID | Requisito | Prioridad | Norma |
-|---|---|---|---|
-| RF-901 | Motor de alertas parametrizable: avalúo vencido, póliza por vencer, perfeccionamiento pendiente > N días, liberación pendiente > SLA, garantía sin cobertura, revaluación con variación > X %. | MVP | N-02, N-06, N-12 |
-| RF-902 | Bandeja de trabajo por rol y alcance, con asignación, reasignación, prioridad y SLA. | MVP | — |
-| RF-903 | Notificaciones por correo y en la plataforma; publicación de la alerta como evento Kafka. | MVP | — |
-
-### M10 — API de consulta para aplicativos de producto y Credicore
+### M07 — Valoraciones
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-1001 | Consulta de una garantía por id, por id externo (aplicativo + referencia de solicitud) y por llave natural: estado, subestado, tipo, valor avaluado, **fecha de avalúo**, valor admisible, pólizas vigentes, registros públicos y obligaciones vinculadas. | MVP | — |
-| RF-1002 | Consulta de garantías por cliente (deudor o propietario) con cobertura disponible, pensada para Credicore. | MVP | N-02 |
-| RF-1003 | Consulta del historial de estados y valores de la garantía. | MVP | N-09 |
-| RF-1004 | Webhooks opcionales para aplicativos que no consumen Kafka. | F3 | — |
+| RF-0701 | Registro de valoraciones con: valor comercial, valor técnico, fecha, perito o proveedor (con RAA si es avalúo), metodología, vigencia, **haircut aplicado (con la regla y la versión)**, valor admisible, valor neto y próxima fecha de valoración. | MVP | N-02, N-05 |
+| RF-0702 | **Histórico completo e inmutable** de valoraciones. Una corrección crea una nueva versión con motivo, nunca sobrescribe. | MVP | N-09 |
+| RF-0703 | Tipos de valoración: avalúo comercial, avalúo catastral, guía Fasecolda, índice, saldo certificado (depósitos, cesantías FNA), porcentaje de cobertura certificado (FNG/FAG), valor del contrato o de la cartera cedida (derechos de cobro) y valor de los derechos fiduciarios. | MVP | N-02 |
+| RF-0704 | **Revaluación anual de vehículos con Fasecolda**: carga de la guía, cruce por código y modelo, traza del resultado y bandeja para los vehículos sin coincidencia. | MVP | N-07 |
+| RF-0705 | **Avalúo catastral de inmuebles**: NPN, gestor catastral, valor y vigencia, con histórico separado del avalúo comercial. Alerta de inmuebles sin avalúo catastral de la vigencia actual. | MVP | N-18 |
+| RF-0706 | Actualización del valor de inmuebles por índice o por nuevo avalúo, según la periodicidad que definan las reglas. | F2 | N-02 |
+| RF-0707 | Alertas de valoraciones vencidas y próximas a vencer (30/60/90 días, configurable). | MVP | N-02 |
+| RF-0708 | Un cambio de valoración dispara un **recálculo de cobertura** (M08) y publica `GarantiaValorada`. | MVP | — |
+| RF-0709 | Cambio manual de valor por encima del umbral → aprobación maker–checker (Appian). | MVP | N-09 |
 
-### M11 — Eventos Kafka
+### M08 — Cobertura
+
+Especificación detallada del algoritmo, casos límite y casos de prueba: **[Anexo A](ANEXO_A_MOTOR_COBERTURA.md)**.
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-0801 | Cálculo de cobertura por **obligación, garantía, cliente y portafolio**, mostrando: exposición, garantías asociadas, valor bruto, haircut, valor admisible, valor neto, valor utilizado, valor disponible, cobertura objetivo, cobertura real, descubierto, brecha y ratio de cobertura. | MVP | N-02 |
+| RF-0802 | Contempla: una garantía con varias obligaciones, varias garantías para una obligación, límites (topes de garantías abiertas, porcentaje FNG, cupo pactado), **priorización**, **métodos de distribución** (secuencial por prioridad, prorrata, valor pactado), redondeos, garantías compartidas, valores cero, valores inválidos, y coberturas de 0 % a 100 % y superiores al 100 %. | MVP | N-02 |
+| RF-0803 | **Explicabilidad total:** cada cifra abre su traza, paso a paso, con entradas, regla y versión, fórmula y resultado. | MVP | N-02 |
+| RF-0804 | **Versionamiento del cálculo:** cada ejecución guarda la fecha de corte, el disparador (evento o Correlation ID), las entradas (con su hash), las versiones de reglas, las salidas y la traza. Se puede reproducir un cálculo pasado y obtener el mismo resultado. | MVP | N-09, N-14 |
+| RF-0805 | Recálculo automático por eventos (nueva valoración, cambio de saldo en Flexcube, vínculo o desvínculo, cambio de estado o idoneidad, activación de una regla) y recálculo nocturno completo con fecha de corte. | MVP | — |
+| RF-0806 | **Simulación:** recalcular con valores o reglas hipotéticos sin afectar el cálculo oficial (usada por M14 y por Riesgos). | MVP | — |
+| RF-0807 | Publicación de `CoberturaCalculada` para FICO y los aplicativos de producto. | MVP | — |
+
+### M09 — Core transaccional de garantías
 
 | ID | Requisito | Prioridad |
 |---|---|---|
-| RF-1101 | La plataforma publica **eventos de dominio** con el patrón *transactional outbox* (garantía de entrega al menos una vez), esquema versionado en un Schema Registry (Avro o JSON Schema) y llave de partición = id de garantía. | MVP |
-| RF-1102 | Catálogo mínimo de eventos: `GarantiaRegistrada`, `GarantiaEstadoCambiado`, `GarantiaConstituida`, `GarantiaValorActualizado`, `GarantiaVinculadaObligacion`, `GarantiaDesvinculadaObligacion`, `GarantiaPolizaActualizada`, `GarantiaLiberada`, `GarantiaEnEjecucion`, `GarantiaAlertaGenerada`. | MVP |
-| RF-1103 | La plataforma consume eventos del core y de los productos: desembolso, cancelación de obligación, castigo y cambio de saldo (para la cobertura). **[SUPUESTO]** Estos eventos existen o se crearán en Kafka. | MVP |
-| RF-1104 | Manejo de errores con reintentos, *dead letter topic* y reprocesamiento desde la interfaz de administración. | MVP |
+| RF-0901 | Vista del registro operacional central: eventos recibidos y procesados, obligaciones, garantías y relaciones garantía–obligación, con estado de procesamiento, fecha y hora, sistema origen, Correlation ID, versión del evento y estado técnico (recibido, procesado, duplicado descartado, en reintento, en DLQ, reprocesado). | MVP |
+| RF-0902 | **Linaje:** desde un evento de negocio se navega a todos los registros que generó o modificó (entidad, id, versión) y a los eventos que publicó. También en sentido inverso: desde un registro, al evento que lo originó. | MVP |
+| RF-0903 | Búsqueda por Correlation ID con la **línea de tiempo de extremo a extremo** a través de aplicativo, Appian, Garantías 360, Kafka, Flexcube y FICO. | MVP |
+| RF-0904 | Reprocesamiento controlado de eventos en DLQ (rol técnico con aprobación), con auditoría. | MVP |
 
-### M12 — Reportes y tableros
-
-| ID | Requisito | Prioridad | Norma |
-|---|---|---|---|
-| RF-1201 | Tablero de gestión: garantías por estado, tipo y producto; pendientes de perfeccionar; avalúos y pólizas vencidos; liberaciones fuera de SLA. | MVP | — |
-| RF-1202 | Reporte de cobertura por cliente, obligación y portafolio. | MVP | N-02 |
-| RF-1203 | Extracción diaria (archivo o evento) de insumos para Riesgos (PDI por tipo de garantía, valor admisible) y Contabilidad (cuentas de orden de garantías recibidas). | MVP | N-02, N-15 |
-| RF-1204 | Soporte a los formatos regulatorios de la SFC que incluyan información de garantías (**el listado de formatos debe confirmarlo Regulatorio**). | F2 | N-02 |
-| RF-1205 | Exportación a Excel/CSV de cualquier consulta, respetando los permisos del rol. | MVP | — |
-
-### M13 — Integración con core y contabilidad
+### M10 — Monitoreo
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-1301 | Consumo de saldos de las obligaciones vinculadas (evento o interfaz diaria). | MVP | N-02 |
-| RF-1302 | Generación de novedades contables (alta, cambio de valor y baja de garantías en cuentas de orden) hacia el core, mediante un evento o una interfaz. | F2 **[SUPUESTO: en el MVP, reporte diario conciliable]** | N-15 |
+| RF-1001 | Centro de monitoreo funcional: garantías vencidas, avalúos por vencer, pólizas próximas a vencer, documentos faltantes, cambios de cobertura relevantes, incumplimientos de reglas, SLA vencidos. | MVP | N-02, N-06 |
+| RF-1002 | Monitoreo técnico: eventos fallidos, integraciones pendientes, retraso de consumo en Kafka (*lag*), errores de API. | MVP | N-09 |
+| RF-1003 | **Conciliación entre sistemas:** diaria con Flexcube (obligaciones existentes, estado y saldo), con OnBase (documentos referenciados existen y su hash coincide) y con Appian (tareas huérfanas o garantías sin proceso). Cada diferencia genera una alerta. | MVP | N-02, N-09 |
+| RF-1004 | Las alertas se generan por reglas (M14), con criticidad (crítica, alta, media, baja), responsable, SLA y estado (abierta, en gestión, resuelta, descartada con motivo). Se priorizan y filtran por criticidad. | MVP | — |
+| RF-1005 | Cada alerta crea o actualiza una tarea en Appian vía `AlertaGenerada`. | MVP | — |
 
-### M14 — Migración desde Shivam
+### M11 — Ejecución
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1101 | Registro de las garantías en ejecución: obligación, cliente, saldo (Flexcube), garantía, valor, cobertura, estado jurídico, **mecanismo** (judicial, pago directo o ejecución especial según la Ley 1676, reclamación FNG/FAG, cobro de cesantías pignoradas al FNA, restitución fiduciaria), etapa, recuperación estimada, recuperación obtenida, fechas, responsable (abogado interno o externo), juzgado o radicado y evidencias. | MVP (registro) | N-03, N-17, N-20 |
+| RF-1102 | Recuperación estimada = valor neto × tasa de recuperación por tipo − costos estimados (regla). Se compara con la obtenida. | F2 | N-02 |
+| RF-1103 | Registro de costos, bienes recibidos en dación o adjudicación, y cierre con su resultado. | F2 | — |
+| RF-1104 | El inicio de la ejecución requiere aprobación de un Director de Jurídica (Appian) y publica un evento. | MVP | N-09 |
+
+### M12 — Liberación
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1201 | Flujo de liberación: solicitud (automática por cancelación de obligaciones o manual por decisión del Banco) → validaciones → autorizaciones → paz y salvo → cancelación de registros → entrega de documentos → estado final, todo con evidencia. | MVP | N-12 |
+| RF-1202 | **Bloqueo:** no se libera una garantía con obligaciones activas en Flexcube (consulta en línea al momento de liberar), ni una garantía compartida o abierta que respalde otras obligaciones vigentes. La única excepción es una **autorización explícita** de nivel Director con motivo (p. ej., sustitución), que queda con evidencia. | MVP | N-02, N-09 |
+| RF-1203 | Cancelación de registros según el tipo: escritura de cancelación y registro en la ORIP, formulario de cancelación en el RGM, levantamiento en el RUNT, despignoración ante el FNA, notificación al FNG, liberación de depósitos, terminación o restitución fiduciaria. | MVP | N-03, N-04, N-20, N-21 |
+| RF-1204 | SLA de liberación medido desde la cancelación de la última obligación, con alertas por vencimiento (protección al consumidor). | MVP | N-12 |
+| RF-1205 | Acta de entrega de documentos al cliente, con evidencia. | MVP | N-12 |
+| RF-1206 | Liberación parcial y sustitución de garantías, con validación de la cobertura remanente. | F2 | N-02 |
+
+### M13 — Cumplimiento SFC
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1301 | **Catálogo de controles** configurable. Cada control tiene: código, norma asociada (N-xx), descripción, dimensión (existencia, idoneidad, documentación, valoración, vigencia, cobertura, registro, evidencia, trazabilidad), métrica, umbral, periodicidad, responsable y forma de evaluación (automática por regla o manual con evidencia). | MVP | N-01 a N-21 |
+| RF-1302 | Tablero de **nivel de cumplimiento** por dimensión, norma, segmento y producto, con la tendencia. | MVP | — |
+| RF-1303 | Controles iniciales (ejemplos): % de garantías activas con valoración vigente; % de hipotecas con póliza de incendio y terremoto vigente; % de mobiliarias inscritas en el RGM; % de garantías con documentación completa y hash válido; % de liberaciones dentro del SLA; % de garantías idóneas con estudio jurídico aprobado; % de inmuebles con avalúo catastral de la vigencia; % de pignoraciones de cesantías con destino de vivienda y autorización escrita. | MVP | N-01 a N-20 |
+| RF-1304 | **Brechas:** cada control que incumple genera una brecha con las garantías afectadas. | MVP | — |
+| RF-1305 | **Plan de remediación** por brecha: acciones, responsable, fecha, avance, evidencia y aprobación del cierre por Cumplimiento. | F2 | — |
+| RF-1306 | Paquete de evidencia exportable por control y fecha de corte (para la SFC o la auditoría), firmado con hash. | F2 | N-14 |
+
+### M14 — Motor de reglas (no-code)
+
+Especificación detallada, ciclo de vida, lenguaje de fórmulas y ejemplos: **[Anexo B](ANEXO_B_MOTOR_REGLAS.md)**.
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1401 | Los usuarios funcionales definen reglas **sin desarrollar software**. | MVP | — |
+| RF-1402 | Atributos de cada regla: nombre, descripción, tipo, vigencia (desde/hasta), segmento, producto, tipo de garantía, condición, fórmula, resultado, prioridad, estado, versión, creador y aprobador. | MVP | — |
+| RF-1403 | Tipos de regla: haircut, idoneidad, cobertura objetivo, priorización y distribución, periodicidad de valoración, alertas y criticidad, validación de datos, SLA, pesos del índice de salud, recuperación estimada. | MVP | N-01, N-02 |
+| RF-1404 | Acciones: crear, editar, clonar, probar (casos de prueba por regla), **simular sobre el portafolio real** (impacto antes/después sin afectar producción), versionar, enviar a aprobación, aprobar, rechazar, activar, desactivar. | MVP | — |
+| RF-1405 | **Maker–checker:** una regla solo entra en producción aprobada por un usuario distinto de su creador, con rol Aprobador de reglas. | MVP | N-09 |
+| RF-1406 | Las fórmulas soportan operaciones matemáticas y financieras básicas (aritmética, mín./máx., redondeo, porcentajes, condicionales, fechas y antigüedades, conversión de moneda con TRM, búsqueda en tablas). | MVP | — |
+| RF-1407 | Cada ejecución de una regla queda auditada: regla y versión, entradas (hash), resultado, entidad afectada, Correlation ID. Se publica `ReglaEjecutada` (resumido o por lotes). | MVP | N-09 |
+| RF-1408 | Las versiones anteriores quedan inmutables y consultables. Para reproducir un cálculo pasado se usa la versión que estaba vigente. | MVP | N-09 |
+
+### M15 — Auditoría
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1501 | Toda modificación genera un registro de auditoría con: usuario o sistema, fecha y hora, acción, entidad, registro, valor anterior, valor nuevo, sistema origen, IP o contexto, Correlation ID, evidencia y motivo. También se auditan las consultas de datos personales. | MVP | N-09, N-11 |
+| RF-1502 | **Auditoría inmutable y verificable:** solo se agregan registros (nunca se editan ni borran), encadenados por hash (cada registro incluye el SHA-256 del anterior), con sellado periódico en Blob inmutable. Una verificación de integridad detecta cualquier alteración. | MVP | N-09, N-14 |
+| RF-1503 | Línea de tiempo comprensible para auditores y usuarios de negocio, por garantía, obligación, usuario o Correlation ID, con filtros. | MVP | — |
+| RF-1504 | **Reproducibilidad de cada decisión:** para cualquier versión se puede demostrar qué información existía, qué regla estaba vigente, qué cálculo se ejecutó, quién hizo la acción, cuándo ocurrió y qué evidencia se usó. | MVP | N-09, N-14 |
+| RF-1505 | Retención de 10 años. | MVP | N-13 |
+
+### M16 — Configuración de tipos de garantía
+
+> Reutiliza el modelo del motor de parametrización de **Proceder** (`genesis-247/factory-plataforma-proceder-legal`, RF-03): campos reutilizables, versiones inmutables, identidad estable de estados y opciones, documentos no retroactivos, y columnas relacionales + JSONB. Las extensiones propias de Garantías 360 se marcan como **[G360]**.
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1601 | Crear, editar, versionar e inactivar tipos de garantía sin despliegue. Al inactivar un tipo con garantías activas, el sistema advierte cuántas son (advertencia no bloqueante). | MVP | N-01 |
+| RF-1602 | Atributos de comportamiento del tipo: clase, requiere avalúo comercial o catastral, fuente de valoración, registro público requerido (ORIP, RGM, RUNT, FNA, FNG, ninguno), requiere póliza, puede ser abierta o cerrada, admite varias obligaciones, llave natural. Los **haircuts, la idoneidad y las periodicidades se definen como reglas (M14)**, no como atributos fijos. **[G360]** | MVP | N-01, N-02 |
+| RF-1603 | Catálogo reutilizable de campos personalizados (texto, número, fecha, lista con opciones de id estable **+ [G360]** moneda, sí/no, selección múltiple, referencia a catálogo maestro), con validaciones y ayuda contextual. | MVP | — |
+| RF-1604 | Asociación campo–tipo con obligatoriedad por tipo **y por estado [G360]**, orden y grupo. | MVP | — |
+| RF-1605 | Flujo de estados por tipo, versionado, con estado lógico estable y validación de camino a un estado final. Cada estado se mapea a un **macroestado fijo (M03) [G360]**. | MVP | N-09 |
+| RF-1606 | Por tipo: tipos de documento exigidos (con vigencia no retroactiva y estado desde el que son exigibles), **checklist jurídico (M05)** y **plantilla de actividades de constitución (M06)**. **[G360]** | MVP | N-13 |
+| RF-1607 | La publicación de una versión de tipo requiere maker–checker y queda en la auditoría. | MVP | N-09 |
+| RF-1608 | Catálogo inicial: hipoteca de vivienda y no vivienda; garantía mobiliaria sobre vehículo; mobiliaria sobre otros bienes; **derechos económicos y de cobro**; depósito en garantía (CDT, cuenta de ahorros); FNG; FAG; **pignoración de cesantías FNA** (anexo C); fiducia en garantía; pignoración de rentas; aval o codeudor; pagaré (no idóneo). | MVP | N-01, N-17, N-19 |
+| RF-1609 | Los campos y documentos configurados se reflejan solos en la API (JSON Schema por tipo y versión), en el formulario dinámico, en la plantilla de carga masiva y en los reportes. | MVP | — |
+
+### M17 — Registro por API y carga masiva
 
 | ID | Requisito | Prioridad |
 |---|---|---|
-| RF-1401 | Inventario y mapeo de los datos de Shivam (garantías, avalúos, pólizas, vinculaciones, documentos e historial) hacia el modelo nuevo, incluidos los campos personalizados. | MVP |
-| RF-1402 | Proceso de migración repetible (ETL) con ejecuciones de prueba, reglas de calidad de datos, reporte de rechazos y conciliación de conteos y valores por tipo y estado. | MVP |
-| RF-1403 | Migración de documentos con verificación de integridad (hash). | MVP |
-| RF-1404 | Estrategia de salida a producción: *big bang* por fecha de corte o convivencia por producto — **ver P-05**. | MVP |
-| RF-1405 | Las garantías migradas conservan su identificador de Shivam como referencia externa. | MVP |
+| RF-1701 | API REST de registro para los aplicativos de producto, **idempotente** (`Idempotency-Key`), validada contra el JSON Schema del tipo, con errores estructurados por campo (RFC 9457). Responde el ID `GAR-…` y el estado. | MVP |
+| RF-1702 | Registro asíncrono alterno por evento Kafka de los aplicativos que lo prefieran. | F2 |
+| RF-1703 | Carga masiva con el asistente de 4 pasos de Proceder (RF-17): plantilla por tipo, validación de estructura, reporte de errores por fila, confirmación aparte para las filas que actualizan registros existentes, aprobación maker–checker. También neutraliza fórmulas incrustadas en el archivo, tiene límites de tamaño y tiempo, y deja historial auditable. | MVP |
+| RF-1704 | Captura manual en la interfaz para casos excepcionales, con formulario dinámico. | MVP |
 
-### M15 — Seguridad, auditoría y administración
+### M18 — Seguros
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
-| RF-1501 | Autenticación de usuarios con **Microsoft Entra ID (SSO + MFA)**; autenticación de sistemas con OAuth 2.0 *client credentials* a través de Azure API Management. | MVP | N-09 |
-| RF-1502 | Autorización por rol y por alcance de datos (RBAC + atributos). | MVP | N-09 |
-| RF-1503 | **Bitácora de auditoría inmutable** de toda consulta de datos personales y de toda modificación (valor anterior / nuevo, usuario, IP, fecha y hora, canal), consultable por Auditoría. | MVP | N-09, N-11 |
-| RF-1504 | Segregación de funciones: quien registra no aprueba; el Administrador no opera garantías. | MVP | N-09 |
-| RF-1505 | Parametrización con auditoría: umbrales, SLA, porcentajes de admisibilidad, periodicidades y plantillas de notificación. | MVP | N-09 |
+| RF-1801 | Pólizas asociadas a la garantía: aseguradora, número, ramo, valor asegurado, vigencia, beneficiario oneroso, colectiva o endosada, documento. | MVP | N-06 |
+| RF-1802 | Alertas de vencimiento, no renovación e infraseguro (valor asegurado menor que el valor de la garantía, por regla). | MVP | N-06 |
+| RF-1803 | Carga masiva o integración de renovaciones de pólizas colectivas. | F2 | N-06 |
+
+### M19 — Documentos y evidencias
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-1901 | Los **originales se custodian en OnBase**. Garantías 360 guarda la referencia (id OnBase), el tipo documental, los metadatos, el **SHA-256** y el estado de vigencia. | MVP | N-13, N-14 |
+| RF-1902 | Carga desde Garantías 360 o desde Appian: el archivo va a OnBase y Garantías 360 calcula y guarda el hash. Se publica `DocumentoAdjuntado`. | MVP | N-14 |
+| RF-1903 | El visor abre el documento desde OnBase respetando los permisos de Garantías 360. | MVP | — |
+| RF-1904 | **Azure Blob privado con inmutabilidad (WORM):** solo evidencias técnicas propias (snapshots de cálculos de cobertura, sellos de auditoría, exportes, paquetes de evidencia), cada una con su hash y retención de 10 años. | MVP | N-13, N-14 |
+| RF-1905 | La verificación periódica de integridad compara los hashes de Garantías 360 contra OnBase y Blob; toda diferencia es una alerta crítica. | MVP | N-09 |
+
+### M20 — Integraciones externas
+
+| ID | Integración | MVP | F2 | Norma |
+|---|---|---|---|---|
+| RF-2001 | **Fasecolda** — guía de valores | Carga de archivo | Servicio | N-07 |
+| RF-2002 | **RGM (Confecámaras)** — inscripción, modificación, cancelación | Registro manual del folio con soporte | Integración | N-03 |
+| RF-2003 | **ORIP / SNR (VUR)** — certificados de tradición | Registro manual con soporte | Consulta automática | N-04 |
+| RF-2004 | **IGAC / gestores catastrales** — reporte del avalúo catastral | Archivo generado + constancia de envío | Transmisión automática | N-18 |
+| RF-2005 | **RUNT** — historial y anotaciones del vehículo | Registro manual | Consulta | N-21 |
+| RF-2006 | **FNG** — certificados, cobertura, reclamaciones | Registro manual y carga | Integración | N-17 |
+| RF-2007 | **FNA** — confirmación de pignoración, saldo de cesantías o AVC, despignoración, cobro | Registro manual con soporte (anexo C) | Integración según convenio | N-20 |
+| RF-2008 | **SARLAFT** — servicio interno de listas | — | Integración | N-08 |
+| RF-2009 | Toda integración deja una bitácora de solicitud, respuesta, errores y reintentos, visible en M09. | ✔ | ✔ | N-09 |
+
+### M21 — Eventos Kafka
+
+| ID | Requisito | Prioridad |
+|---|---|---|
+| RF-2101 | Kafka es el **backbone de eventos**. Patrones obligatorios: **transactional outbox** (publicación), **inbox con deduplicación** (consumo idempotente), **reintentos con backoff**, **Dead Letter Queue**, **Correlation ID** y causation ID en las cabeceras, **versionamiento de eventos** con Schema Registry y compatibilidad hacia atrás. | MVP |
+| RF-2102 | **Eventos publicados:** `GarantiaCreada`, `GarantiaActualizada`, `GarantiaEstadoCambiado`, `EstudioJuridicoConcluido`, `GarantiaPerfeccionada`, `GarantiaValorada`, `CoberturaCalculada`, `DocumentoAdjuntado`, `GarantiaVinculadaObligacion`, `GarantiaDesvinculadaObligacion`, `PolizaActualizada`, `GarantiaEnEjecucion`, `GarantiaLiberada`, `ReglaEjecutada`, `ReglaActivada`, `AlertaGenerada`. | MVP |
+| RF-2103 | **Eventos consumidos:** Flexcube (`ObligacionDesembolsada`, `SaldoObligacionActualizado`, `MoraActualizada`, `ObligacionCancelada`, `ObligacionCastigada`); Appian (`TareaAsignada`, `TareaCompletada`, `AprobacionResuelta`); aplicativos de producto (`SolicitudGarantiaRegistrada`, F2). **[SUPUESTO: Flexcube publica estos eventos en Kafka directamente o mediante CDC o un adaptador — P-07]** | MVP |
+| RF-2104 | Contratos documentados en **AsyncAPI 3.0**, con formato CloudEvents. La llave de partición es el id de la garantía (o de la obligación, en eventos de Flexcube). | MVP |
+
+### M22 — Reportes
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-2201 | Reportes operativos y de cobertura por cliente, obligación y portafolio, exportables. | MVP | N-02 |
+| RF-2202 | Extracción diaria para FICO/Riesgo (tipo de garantía, valor admisible, idoneidad, cobertura) y para Contabilidad (cuentas de orden). | MVP | N-02, N-15 |
+| RF-2203 | Soporte a los formatos regulatorios de la SFC que incluyan información de garantías (lista a confirmar con Regulatorio, P-14). | F2 | N-02 |
+
+### M23 — Migración desde Shivam
+
+| ID | Requisito | Prioridad |
+|---|---|---|
+| RF-2301 | Mapeo de Shivam al modelo nuevo: garantías, vínculos, valoraciones, pólizas, documentos (a OnBase, con hash) e historial. | MVP |
+| RF-2302 | ETL repetible con ensayos, reglas de calidad, reporte de rechazos y **conciliación** (100 % en conteos, ≥ 99,9 % en valores por tipo y estado). | MVP |
+| RF-2303 | Las garantías migradas conservan el id de Shivam como referencia externa, con fuente de información "migración Shivam". Su primer cálculo de cobertura queda versionado como línea base. | MVP |
+| RF-2304 | Estrategia de salida a producción (corte único o por producto) por definir (P-05). | MVP |
+
+### M24 — Seguridad y administración
+
+| ID | Requisito | Prioridad | Norma |
+|---|---|---|---|
+| RF-2401 | Usuarios: **OIDC con Microsoft Entra ID** (SSO + MFA). Sistemas: **OAuth 2.0** *client credentials* con *private_key_jwt* o mTLS, a través de Azure API Management. | MVP | N-09 |
+| RF-2402 | RBAC con alcance de datos (sección 4), mínimo privilegio y segregación de funciones aplicada en el backend. | MVP | N-09 |
+| RF-2403 | Cifrado en tránsito (TLS 1.2+) y en reposo con llaves administradas por el Banco (Key Vault); secretos solo en Key Vault; identidades administradas. | MVP | N-09, N-10 |
+| RF-2404 | Enmascaramiento de datos personales según el rol; auditoría de las consultas de datos sensibles. | MVP | N-11 |
+| RF-2405 | Administración de parámetros, catálogos maestros y umbrales, con auditoría y maker–checker. | MVP | N-09 |
 
 ---
 
-## 6. Requisitos no funcionales
+## 7. Requisitos no funcionales
 
 | ID | Categoría | Requisito |
 |---|---|---|
-| RNF-01 | Disponibilidad | Servicio **24/7**. Objetivo ≥ 99,9 % mensual para las APIs de registro y consulta. Despliegue en al menos 2 zonas de disponibilidad. |
-| RNF-02 | Continuidad **[SUPUESTO]** | RPO ≤ 15 min, RTO ≤ 4 h, con una región secundaria en Azure (par regional) para DR; pruebas de DR al menos una vez al año. |
-| RNF-03 | Rendimiento **[SUPUESTO]** | API de consulta: p95 < 300 ms; API de registro: p95 < 800 ms; carga masiva de 100.000 registros en < 1 h. Se ajusta al conocer los volúmenes (P-06). |
-| RNF-04 | Escalabilidad | Escalado horizontal automático de los servicios sin estado. |
-| RNF-05 | Seguridad | Cifrado en tránsito (TLS 1.2+) y en reposo (llaves administradas por el Banco en Key Vault — CMK); secretos en Key Vault; endpoints privados; WAF; pruebas de seguridad (SAST, DAST, dependencias) en el pipeline; pentest antes de producción. |
-| RNF-06 | Nube | Cumplimiento de la CE 005/2019: datos en regiones aprobadas por el Banco, acceso de la SFC, plan de salida y portabilidad (contenedores + base de datos estándar). |
-| RNF-07 | Retención | Datos y documentos: 10 años desde la liberación o ejecución (N-13); bitácora de auditoría: 10 años. **Validar con Jurídica (pregunta 21 abierta).** |
-| RNF-08 | Observabilidad | Logs estructurados, trazas distribuidas (OpenTelemetry), métricas y alertas en Azure Monitor / Application Insights; correlación de extremo a extremo por `traceId`. |
-| RNF-09 | Idioma y accesibilidad | Interfaz en español (Colombia), formatos es-CO (moneda COP, fechas dd/mm/aaaa); accesibilidad WCAG 2.1 AA. |
-| RNF-10 | Mantenibilidad | Pruebas automatizadas (unitarias, integración y contrato) con cobertura ≥ 80 % en el dominio; infraestructura como código; CI/CD con ambientes dev / qa / uat / prod. |
-| RNF-11 | Interoperabilidad | APIs documentadas en OpenAPI 3.1; eventos documentados en AsyncAPI; versionamiento semántico de contratos. |
-| RNF-12 | Zona horaria | Almacenamiento en UTC; presentación en America/Bogota. |
-
----
-
-## 7. Arquitectura de referencia propuesta (Azure)
-
-> No hay un stack impuesto. La propuesta prioriza tecnologías con amplia oferta de talento en Colombia, soporte de largo plazo y despliegue nativo en Azure. **Requiere aprobación de Arquitectura TI.**
-
-| Capa | Propuesta | Justificación |
-|---|---|---|
-| Backend | **Java 21 + Spring Boot 3** (monolito modular con límites claros por módulo, preparado para extraer servicios si fuera necesario) | Estándar en la banca colombiana, LTS, ecosistema maduro para Kafka, seguridad y pruebas. Alternativa equivalente: .NET 8. |
-| Frontend | **Next.js (React + TypeScript) + Tailwind CSS + shadcn/ui, React Hook Form + Zod, TanStack Query**, con un **renderizador de formularios dinámicos basado en JSON Schema** | Es el mismo stack de front de Proceder: el equipo reutiliza componentes (formulario dinámico, asistente de carga masiva, editor de flujos) y conocimiento. Se despliega como contenedor en Azure, no en Vercel. |
-| Base de datos | **Azure Database for PostgreSQL – Flexible Server** (zona redundante); campos personalizados en **JSONB** validados contra JSON Schema, con índices GIN | Es el mismo modelo híbrido de Proceder (PostgreSQL relacional + JSONB), así que el diseño de las tablas de configuración puede portarse casi directo. |
-| Mensajería | **Kafka** (el cluster corporativo existente o Azure Event Hubs con protocolo Kafka — ver P-07) + Schema Registry | Requisito explícito del negocio. |
-| Cómputo | **Azure Kubernetes Service** o **Azure Container Apps** | Contenedores portables (plan de salida de la CE 005/2019). |
-| Exposición de APIs | **Azure API Management** + Application Gateway/WAF | Seguridad, cuotas y catálogo de APIs para los productos. |
-| Identidad | **Microsoft Entra ID** | SSO, MFA y grupos para roles. |
-| Documentos | **Azure Blob Storage** con inmutabilidad y *legal hold* | Retención regulatoria. |
-| Procesos batch | Jobs programados (Spring Batch) para revaluación Fasecolda, cargas masivas y alertas | — |
-| Secretos | **Azure Key Vault** | — |
-| Observabilidad | Azure Monitor, Application Insights, Log Analytics; SIEM corporativo (p. ej., Sentinel) | — |
-| IaC / CI-CD | Terraform o Bicep; Azure DevOps o GitHub Actions | — |
-
-> **Diferencia con Proceder:** Proceder corre en Vercel + Supabase. Esta plataforma debe correr en **Azure** (decisión D-11, CE 005/2019), integrarse con **Kafka** y operar 24/7 con cargas batch (Fasecolda, catastro, migración). Por eso el backend se propone como un servicio independiente (Java/Spring Boot) y no con Server Actions ni Supabase. Las **tablas y reglas** del motor de configuración sí se portan. Si Arquitectura prefiere un backend en TypeScript (NestJS) para compartir más código con Proceder, también es viable (P-17).
-
-### 7.1 Estructura de repositorios
-- `garantias-backend`: API, dominio, integraciones, batch y migración.
-- `garantias-frontend`: aplicación web SPA.
+| RNF-01 | Disponibilidad | Servicio 24/7, ≥ 99,9 % mensual en las APIs; despliegue en varias zonas de disponibilidad. |
+| RNF-02 | Continuidad **[SUPUESTO]** | RPO ≤ 15 min, RTO ≤ 4 h, con región secundaria para recuperación ante desastres; prueba anual. |
+| RNF-03 | Rendimiento **[SUPUESTO]** | Consulta p95 < 300 ms; registro p95 < 800 ms; cálculo de cobertura de una obligación p95 < 500 ms; recálculo nocturno del portafolio completo < 2 h; evento publicado < 5 s p95 después del commit. Se ajusta con volúmenes reales (P-06). |
+| RNF-04 | Escalabilidad | Escalado horizontal de servicios sin estado y de consumidores Kafka. |
+| RNF-05 | Seguridad | OWASP ASVS nivel 2; análisis estático, dinámico, de dependencias y de secretos en el pipeline; pentest antes de producción; WAF; endpoints privados. |
+| RNF-06 | Nube | Cumplimiento de la CE 005/2019: datos en regiones aprobadas, acceso de la SFC, plan de salida (contenedores + PostgreSQL estándar). |
+| RNF-07 | Retención | 10 años para datos, auditoría y evidencias. **[Validar con Jurídica, P-10]** |
+| RNF-08 | Observabilidad | Ver sección 13. |
+| RNF-09 | Integridad | SHA-256 en documentos, snapshots y cadena de auditoría; verificación periódica. |
+| RNF-10 | Exactitud numérica | Aritmética decimal exacta (nunca punto flotante) en montos y ratios; redondeo definido en el anexo A. |
+| RNF-11 | Idioma y accesibilidad | Español (es-CO), COP, dd/mm/aaaa; WCAG 2.1 AA. |
+| RNF-12 | Mantenibilidad | Cobertura de pruebas ≥ 80 % en el dominio y 100 % de ramas en el motor de cobertura; infraestructura como código; CI/CD con ambientes dev, qa, uat y prod. |
+| RNF-13 | Zona horaria | Almacenamiento en UTC; presentación en America/Bogota. |
 
 ---
 
@@ -408,177 +533,253 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
-  TIPO_GARANTIA ||--o{ VERSION_TIPO : tiene
-  CAMPO_CATALOGO ||--o{ CAMPO_TIPO_GARANTIA : "se usa en"
+  TIPO_GARANTIA ||--o{ VERSION_TIPO : versiona
   VERSION_TIPO ||--o{ CAMPO_TIPO_GARANTIA : define
-  VERSION_TIPO ||--o{ FLUJO_ESTADO : "tiene flujo"
-  FLUJO_ESTADO ||--o{ TRANSICION_PERMITIDA : origen
-  TIPO_GARANTIA ||--o{ TIPO_DOCUMENTO_GARANTIA : exige
-  VERSION_TIPO ||--o{ GARANTIA : "instancia de"
-  GARANTIA ||--o{ GARANTIA_OBLIGACION : respalda
-  GARANTIA ||--o{ PARTICIPANTE_GARANTIA : "tiene"
-  PERSONA ||--o{ PARTICIPANTE_GARANTIA : "es"
-  GARANTIA ||--o{ AVALUO : "valorada por"
-  GARANTIA ||--o{ POLIZA : "asegurada por"
-  GARANTIA ||--o{ REGISTRO_PUBLICO : "inscrita en"
-  GARANTIA ||--o{ DOCUMENTO : "expediente"
-  GARANTIA ||--o{ HISTORIAL_ESTADO : "transiciona"
-  GARANTIA ||--o{ TAREA : genera
-  GARANTIA ||--o| PROCESO_EJECUCION : "puede tener"
-  OBLIGACION ||--o{ GARANTIA_OBLIGACION : "respaldada por"
+  CAMPO_CATALOGO ||--o{ CAMPO_TIPO_GARANTIA : usa
+  VERSION_TIPO ||--o{ FLUJO_ESTADO : flujo
+  VERSION_TIPO ||--o{ PLANTILLA_ACTIVIDAD : constitucion
+  VERSION_TIPO ||--o{ ITEM_CHECKLIST_JURIDICO : checklist
+  GARANTIA ||--o{ VERSION_GARANTIA : historico
+  GARANTIA ||--o{ VINCULO_GARANTIA_OBLIGACION : respalda
+  OBLIGACION_REF ||--o{ VINCULO_GARANTIA_OBLIGACION : "respaldada por"
+  GARANTIA ||--o{ PARTICIPANTE : tiene
+  GARANTIA ||--o{ GRAVAMEN_PREVIO : "comprometida con"
+  GARANTIA ||--o{ VALORACION : valorada
+  GARANTIA ||--o{ POLIZA : asegurada
+  GARANTIA ||--o| ESTUDIO_JURIDICO : estudiada
+  ESTUDIO_JURIDICO ||--o{ HALLAZGO : tiene
+  ESTUDIO_JURIDICO ||--o{ CONDICIONAMIENTO : impone
+  GARANTIA ||--o{ ACTIVIDAD_CONSTITUCION : perfecciona
+  GARANTIA ||--o{ REGISTRO_PUBLICO : inscrita
+  GARANTIA ||--o{ DOCUMENTO_REF : expediente
+  CALCULO_COBERTURA ||--o{ ASIGNACION_COBERTURA : distribuye
+  CALCULO_COBERTURA ||--o{ PASO_TRAZA : explica
+  REGLA ||--o{ VERSION_REGLA : versiona
+  VERSION_REGLA ||--o{ EJECUCION_REGLA : ejecuta
+  GARANTIA ||--o{ ALERTA : genera
+  GARANTIA ||--o| PROCESO_EJECUCION : ejecuta
+  GARANTIA ||--o| LIBERACION : libera
+  CONTROL_SFC ||--o{ BRECHA : detecta
+  BRECHA ||--o| PLAN_REMEDIACION : remedia
+  EVENTO_INBOX ||--o{ LINAJE : genera
+  EVENTO_OUTBOX }o--|| LINAJE : publica
+  REGISTRO_AUDITORIA }o--|| REGISTRO_AUDITORIA : "hash anterior"
 ```
 
-| Entidad | Atributos clave |
+| Entidad | Notas clave |
 |---|---|
-| GARANTIA | id (UUID), tipo + versión, estado, subestado, clase, abierta/cerrada, moneda, valor vigente, valor admisible, fecha del último avalúo, próxima revaluación, llave natural, aplicativo de origen, referencia externa, id Shivam, `atributos` (JSONB), auditoría. |
-| GARANTIA_OBLIGACION | id de la obligación en el core, número de solicitud, producto, valor/porcentaje asignado, fechas de vínculo y desvínculo. |
-| PARTICIPANTE_GARANTIA | persona, rol (propietario, constituyente, garante, deudor), porcentaje. |
-| AVALUO | tipo (comercial, catastral, Fasecolda, índice), fecha, valor, fuente, avaluador y RAA (comercial), NPN, gestor catastral y vigencia (catastral), documento. |
-| CAMPO_CATALOGO / CAMPO_TIPO_GARANTIA | Como `campos_catalogo` / `campo_tipo_servicio` de Proceder: código, etiqueta, tipo de dato, opciones con id estable; obligatoriedad (por tipo y estado), orden y grupo. |
-| FLUJO_ESTADO / TRANSICION_PERMITIDA | Como `flujo_estados` / `transiciones_permitidas` de Proceder, más `macroestado` (RF-110) y `estado_logico_id`. |
-| TIPO_DOCUMENTO_GARANTIA | Vigencia desde/hasta (no retroactiva), obligatorio, estado desde el que es exigible. |
-| POLIZA | aseguradora, número, ramo, valor asegurado, vigencia, beneficiario. |
-| REGISTRO_PUBLICO | entidad (RGM, ORIP, otra), número (folio / matrícula), tipo de acto, fecha, documento. |
+| GARANTIA | UUID, `GAR-AAAA-NNNNNN`, tipo y versión, macroestado + estado del tipo, estado jurídico, estado documental, idoneidad (+ regla y versión), valores vigentes (comercial, admisible, neto), moneda, llave natural, fuente, id Shivam, `atributos` JSONB. |
+| OBLIGACION_REF | Referencia a la obligación en Flexcube (id, producto, segmento, cliente) y **snapshots fechados** de saldo y mora usados en los cálculos (no es el maestro de la obligación). |
+| VINCULO_GARANTIA_OBLIGACION | Tipo (cerrada o abierta), tope, prioridad, valor o porcentaje pactado, vigencia. |
+| CALCULO_COBERTURA | Fecha de corte, disparador, Correlation ID, hash de entradas, versiones de reglas, resultados, hash del snapshot en Blob. |
+| ASIGNACION_COBERTURA | Garantía → obligación → valor asignado, método, orden. |
+| PASO_TRAZA | Orden, descripción, fórmula, entradas, resultado, regla y versión. |
+| VERSION_REGLA | Expresión o tabla de decisión, vigencia, estado, creador, aprobador, hash. |
+| REGISTRO_AUDITORIA | Solo inserción; `hash_anterior` + `hash_propio` (cadena). |
+| DOCUMENTO_REF | Id OnBase, tipo documental, SHA-256, vigencia, verificado en. |
 
 ---
 
-## 9. Contratos de integración (borrador)
+## 9. Contratos de API (borrador)
 
-### 9.1 API REST (prefijo `/api/v1`)
-| Método | Recurso | Uso |
+Contratos en **OpenAPI 3.1**, versionados por URL (`/api/v1`), con errores RFC 9457, paginación por cursor, `Idempotency-Key` en las operaciones que crean o modifican, y cabeceras `X-Correlation-ID` y `traceparent`. Siguen los principios de finanzas abiertas (N-22).
+
+| Método | Recurso | Consumidor principal |
 |---|---|---|
-| `GET` | `/tipos-garantia` y `/tipos-garantia/{codigo}/esquema` | Catálogo y JSON Schema vigente de los campos por tipo. |
-| `POST` | `/garantias` | Registrar garantía (idempotente). |
-| `PATCH` | `/garantias/{id}` | Actualizar en estados permitidos. |
-| `GET` | `/garantias/{id}` | Detalle, estado, valor avaluado, fecha de avalúo, pólizas, registros. |
-| `GET` | `/garantias?origen={app}&referencia={ref}` | Búsqueda por referencia del aplicativo de producto. |
-| `GET` | `/garantias?documentoCliente=...` | Garantías por cliente (Credicore). |
-| `GET` | `/clientes/{doc}/cobertura` | Cobertura consolidada del cliente. |
-| `POST` | `/garantias/{id}/obligaciones` | Vincular obligación. |
-| `POST` | `/garantias/{id}/avaluos` | Registrar avalúo. |
-| `POST` | `/garantias/{id}/documentos` | Adjuntar documento. |
-| `GET` | `/garantias/{id}/historial` | Historial de estados y valores. |
-| `POST` | `/cargas-masivas` / `GET /cargas-masivas/{id}` | Carga masiva y su resultado. |
-
-**Ejemplo de registro:**
-```json
-POST /api/v1/garantias
-Idempotency-Key: 7f1c...-hipotecario-SOL-2026-000123
-{
-  "tipo": "VEHICULO_MOBILIARIA",
-  "origen": { "aplicativo": "CREDITO_VEHICULO", "referencia": "SOL-2026-000123" },
-  "moneda": "COP",
-  "valorComercial": 85000000,
-  "participantes": [
-    { "rol": "PROPIETARIO", "tipoDocumento": "CC", "numeroDocumento": "1020304050", "porcentaje": 100 }
-  ],
-  "obligaciones": [ { "numeroSolicitud": "SOL-2026-000123", "porcentajeAsignado": 100 } ],
-  "atributos": {
-    "placa": "ABC123",
-    "vin": "9BWZZZ377VT004251",
-    "codigoFasecolda": "01601141",
-    "modelo": 2024,
-    "servicio": "PARTICULAR"
-  }
-}
-```
-
-### 9.2 Eventos (AsyncAPI)
-- Tópico propuesto: `bp.garantias.eventos.v1` (un tópico por dominio, tipo de evento en la cabecera), o un tópico por tipo de evento según el estándar corporativo (P-07).
-- Sobre CloudEvents: `id`, `type`, `source`, `time`, `subject` (id de garantía), `data`, `dataschema`.
+| `GET` | `/tipos-garantia`, `/tipos-garantia/{codigo}/esquema` | Productos, Appian |
+| `POST` / `PATCH` | `/garantias`, `/garantias/{id}` | Productos, Appian |
+| `GET` | `/garantias/{id}` (expediente), `/garantias?…` (búsqueda) | Productos, Appian, UI |
+| `POST` | `/garantias/{id}/transiciones` | Appian |
+| `POST` / `GET` | `/garantias/{id}/obligaciones` | Productos, Appian |
+| `PUT` | `/garantias/{id}/estudio-juridico` (+ hallazgos, condicionamientos) | Appian |
+| `GET` / `PATCH` | `/garantias/{id}/actividades-constitucion/{actividad}` | Appian |
+| `POST` | `/garantias/{id}/valoraciones` | Appian, batch |
+| `POST` | `/garantias/{id}/documentos` | Appian, UI |
+| `GET` | `/obligaciones/{id}/cobertura`, `/clientes/{id}/cobertura` | FICO, productos |
+| `GET` | `/calculos-cobertura/{id}` (con traza) | UI, FICO, Asistente |
+| `POST` | `/simulaciones-cobertura` | Riesgos |
+| `POST` | `/garantias/{id}/liberacion`, `/garantias/{id}/ejecucion` | Appian |
+| `GET` / `POST` | `/reglas`, `/reglas/{id}/versiones`, `/reglas/{id}/simulaciones` | UI (gobierno) |
+| `GET` | `/auditoria?entidad=…&correlationId=…` | Auditoría |
+| `GET` | `/eventos?correlationId=…` (core transaccional) | UI técnica |
+| `POST` | `/cargas-masivas` | UI |
 
 ---
 
-## 10. Alcance del MVP
+## 10. Eventos (resumen)
 
-| Incluido en el MVP | Fases posteriores |
+Ver M21. Tópicos propuestos: `bp.garantias.garantia.v1`, `bp.garantias.cobertura.v1`, `bp.garantias.reglas.v1`, `bp.garantias.alertas.v1`, más los tópicos de entrada de Flexcube y Appian según el estándar corporativo (P-07). Sobre CloudEvents: `id`, `type` (p. ej., `co.bancopopular.garantias.CoberturaCalculada.v1`), `source`, `time`, `subject`, `correlationid`, `causationid`, `dataschema`, `data`.
+
+---
+
+## 11. Arquitectura de referencia (Azure)
+
+| Capa | Decisión |
 |---|---|
-| M1 catálogo configurable: campos, flujos y documentos por tipo (modelo Proceder) + catálogo inicial | Motor de reglas avanzado (RF-115) |
-| M2 API de registro, captura manual, carga masiva | Registro por evento Kafka (RF-208) |
-| M3 ciclo de vida: registro → constitución → vigente → liberación | Sustitución, liberación parcial, ejecución (RF-305/306) |
-| M4 vinculaciones N:M, participantes, cobertura | SARLAFT en la plataforma (RF-404) |
-| M5 avalúos, valor admisible, revaluación Fasecolda anual, alertas | Actualización de inmuebles por índice, integración con avaluadores |
-| M6 pólizas + alertas | Integración con aseguradoras |
-| M7 registro manual de RGM / ORIP con soportes; **archivo de reporte del avalúo catastral al IGAC / gestor catastral** | Integraciones automáticas RGM, VUR y transmisión automática al IGAC |
-| M8 expediente con retención WORM | Gestor documental corporativo |
-| M9 alertas y bandejas | — |
-| M10 API de consulta | Webhooks |
-| M11 eventos Kafka (publicación y consumo básico) | — |
-| M12 tablero y extracciones para Riesgos y Contabilidad | Formatos regulatorios SFC |
-| M14 migración Shivam | — |
-| M15 seguridad, auditoría, maker–checker | — |
+| Backend | **Java 21 + Spring Boot 3**, monolito modular por dominios (maestro, jurídico, valoración, cobertura, reglas, eventos, auditoría), listo para extraer servicios. |
+| Motor de reglas | **Tablas de decisión DMN con expresiones FEEL** (motor DMN embebido) y un editor no-code propio. Detalle en el anexo B; decisión final en P-20. |
+| Frontend | **Next.js + TypeScript + Tailwind + shadcn/ui**, React Hook Form + Zod y TanStack Query (mismo stack de front que Proceder), con el sistema de diseño de Banco Popular. |
+| Base de datos maestra | **Azure Database for PostgreSQL – Flexible Server**, zona redundante; JSONB para campos configurables. |
+| Documentos | **OnBase** (originales) + **Azure Blob privado inmutable** (evidencias técnicas). |
+| Integración | APIs REST (**OpenAPI**) vía **Azure API Management**; **Kafka** (**AsyncAPI**) + Schema Registry. |
+| Procesos | **Appian**, integrado por REST y eventos. |
+| Cómputo | **AKS** (o Azure Container Apps), en varias zonas. |
+| Identidad y secretos | **Microsoft Entra ID**, identidades administradas, **Key Vault**. |
+| IA (F2) | Modelo desplegado en el tenant de Azure del Banco + recuperación sobre las APIs de consulta de Garantías 360. |
+| Observabilidad | OpenTelemetry → Azure Monitor / Application Insights / Log Analytics; SIEM corporativo. |
+| IaC / CI-CD | Terraform o Bicep; GitHub Actions o Azure DevOps. |
 
 ---
 
-## 11. Criterios de aceptación transversales
-1. Un Administrador crea un tipo de garantía nuevo con al menos 10 campos personalizados y lo publica; el tipo queda disponible en la API, la UI y la plantilla de carga masiva **sin despliegue de código**.
-2. Un aplicativo de producto registra una garantía por API, recibe su id y consulta su estado, valor avaluado y fecha de avalúo.
-3. Cada cambio de estado publica el evento correspondiente en Kafka en < 5 s (p95).
-4. La revaluación Fasecolda actualiza los vehículos, deja la traza y envía las excepciones a una bandeja.
-5. Una liberación exige aprobación de un Director distinto del Gestor que la solicitó.
-6. La conciliación de la migración desde Shivam cuadra al 100 % en conteos y ≥ 99,9 % en valores por tipo, con los rechazos documentados.
+## 12. Integridad y trazabilidad
+
+- **SHA-256** en: documentos (OnBase), snapshots de cálculos de cobertura, versiones de reglas, versiones del maestro, paquetes de evidencia y cadena de auditoría.
+- Cada versión permite demostrar: **qué información existía, qué regla estaba vigente, qué cálculo se ejecutó, quién hizo la acción, cuándo ocurrió y qué evidencia se usó** (RF-1504).
+- Sellado periódico (p. ej., cada hora) del último hash de la cadena de auditoría en Blob inmutable.
+- Verificación automática diaria de integridad; cualquier diferencia es una alerta crítica e incidente de seguridad.
 
 ---
 
-## 12. Riesgos del proyecto
+## 13. Observabilidad
+
+| Tipo | Métricas |
+|---|---|
+| Técnicas | Disponibilidad, latencia (p50/p95/p99) por API, tasa de errores, throughput, *lag* de consumidores Kafka, tamaño de la DLQ, salud de la base de datos (conexiones, locks, replicación), tiempos de las integraciones externas. |
+| Funcionales | Garantías creadas y pendientes por etapa, SLA por etapa, cobertura insuficiente, avalúos vencidos, pólizas vencidas, documentos faltantes, eventos pendientes, casos en ejecución, liberaciones fuera de SLA, duración del recálculo nocturno. |
+| Trazabilidad | Correlation ID y `traceparent` propagados por HTTP, Kafka (cabeceras), Appian y logs. Se consultan en M09 y en Application Insights. |
+
+Tableros técnicos para TI y funcionales en M01 y M10; alertas operativas a guardia 24/7.
+
+---
+
+## 14. Estrategia de pruebas
+
+| Nivel | Alcance |
+|---|---|
+| Unitarias | Dominio, reglas y motor de cobertura (100 % de ramas). |
+| Propiedades | Invariantes del motor de cobertura: Σ asignado ≤ valor neto por garantía; ningún valor negativo; Σ de la distribución = total (sin pérdida por redondeo); determinismo. |
+| Integración | PostgreSQL (Testcontainers), Kafka (outbox, inbox, DLQ, idempotencia), OnBase y Appian simulados, Flexcube simulado. |
+| Contrato | OpenAPI y AsyncAPI con pruebas de contrato del lado del consumidor (productos, Appian, FICO). |
+| Funcionales y E2E | Ciclo completo por escenario (tabla siguiente), a través de Appian simulado. |
+| Regresión | **Golden tests** del motor de cobertura: resultados de versiones anteriores reproducidos exactamente; comparación antes/después de cada cambio de regla. |
+| Carga y rendimiento | Recálculo nocturno del portafolio completo, picos de registro por API y consumo de eventos de saldo. |
+| Seguridad | OWASP ASVS L2, pruebas de autorización (segregación de funciones, alcance de datos), pentest. |
+| Integridad | Manipulación deliberada de la auditoría, de un documento o de un snapshot → detección. |
+| IA (F2) | Conjunto de evaluación, intentos de extracción de datos fuera del alcance del usuario, inyección de instrucciones. |
+
+**Escenarios por producto** (datos sintéticos, sin datos reales de clientes — N-11):
+
+| Escenario | Garantía | Caso a probar |
+|---|---|---|
+| Hipotecario | Inmueble (hipoteca abierta de primer grado) | Estudio jurídico → escritura → ORIP → póliza → avalúo catastral → cobertura → liberación. |
+| Hipotecario + FNA | Pignoración de cesantías FNA (anexo C) | Autorización escrita, destino vivienda, confirmación FNA, despignoración. |
+| Libranza | Pagaré + libranza (no idónea) | Cobertura 0 % idónea, alertas correctas. **El caso "libranza compra de cartera con respaldo FNA" requiere validación jurídica (anexo C).** |
+| Tarjeta de crédito | Depósito en garantía (CDT) | Cobertura > 100 %, haircut 0 %, liberación al cancelar. |
+| Banca Empresas | FNG — capital de trabajo | Cobertura = % certificado × saldo, reclamación en ejecución. |
+| Banca Empresas | Derechos de cobro (contrato con un hospital) | RGM, notificación al deudor cedido, valor del contrato con haircut. |
+| Vehículo | Flota de vehículos (garantía mobiliaria) | Fasecolda anual, RUNT, garantía compartida entre varias obligaciones. |
+| Inmueble comercial | Hipoteca compartida (segundo grado) | Valor neto descontando el primer grado. |
+
+---
+
+## 15. Datos de prueba
+
+Por la Ley 1581 (N-11), los ambientes no productivos usan **solo datos sintéticos**. Se construye un generador de datos coherentes (clientes, obligaciones, garantías, valoraciones, eventos) que incluye los casos del documento de visión (María Fernanda Gómez, Carlos Andrés Méndez, Industrias Metálicas Andinas S.A.S., Inversiones Altavista S.A.S., Transportes del Centro S.A., Suministros Médicos Andinos) y suficiente volumen para pruebas de carga y tableros realistas en UAT.
+
+---
+
+## 16. Alcance del MVP productivo y fases
+
+| Entrega | Contenido |
+|---|---|
+| **MVP productivo** | M01, M03, M04, M05, M06, M07 (sin índice de inmuebles), M08 completo, M09, M10, M11 (registro), M12, M13 (controles e indicadores), M14 completo, M15, M16, M17 (API + masiva), M18, M19, M20 (manual + archivos), M21, M22 (operativos + extracciones), M23, M24. Integraciones: Appian, Flexcube, OnBase, FICO (extracción/evento), Kafka. |
+| **F2** | M02 Asistente IA; M11 recuperación y cierre; M12 liberación parcial y sustitución; M13 planes de remediación y paquetes de evidencia; integraciones automáticas (RGM, VUR, RUNT, IGAC, FNG, FNA, SARLAFT, pólizas colectivas); actualización de inmuebles por índice; formatos regulatorios SFC; registro por evento Kafka. |
+| **F3** | Integración con avaluadores; webhooks; analítica avanzada. |
+
+**Entregables documentales** (por entrega): arquitectura de solución, funcional, de información, de integración y de despliegue en Azure; diagramas; OpenAPI; AsyncAPI; modelo de eventos; modelo de datos; manuales (funcional, técnico, instalación, configuración, despliegue, motor de reglas, administrador, usuario, operación); plan y resultados de pruebas (funcionales, E2E, carga, rendimiento, seguridad, integridad); estrategia de observabilidad; presentación ejecutiva; capacitación.
+
+---
+
+## 17. Criterios de aceptación transversales
+1. Un Administrador crea un tipo de garantía con 10 campos personalizados, su checklist jurídico y su plantilla de constitución, lo publica con maker–checker y el tipo queda disponible en API, UI y carga masiva sin despliegue.
+2. Un aplicativo registra una garantía por API y recibe un `GAR-AAAA-NNNNNN`; Appian ejecuta el estudio jurídico y la constitución llamando a las APIs; la garantía llega a *Activa* al recibir `ObligacionDesembolsada` de Flexcube.
+3. Para cualquier cobertura mostrada, el usuario abre la traza y la reconstruye a mano con las mismas cifras. Un cálculo de hace 6 meses se reproduce exactamente.
+4. Una regla nueva no afecta producción hasta que la aprueba otro usuario; la simulación muestra su impacto antes de aprobarla.
+5. No se puede liberar una garantía con obligaciones activas en Flexcube sin autorización explícita con evidencia.
+6. La alteración de un registro de auditoría o de un documento se detecta en la verificación de integridad.
+7. Un Correlation ID muestra la línea de tiempo completa entre aplicativo, Appian, Garantías 360, Kafka y FICO.
+8. La migración desde Shivam concilia al 100 % en conteos y ≥ 99,9 % en valores.
+
+---
+
+## 18. Riesgos del proyecto
 | Riesgo | Mitigación |
 |---|---|
-| Calidad de datos del legado Shivam | Perfilamiento temprano y ensayos de migración desde el sprint 2. |
-| Dependencia de los aplicativos de producto para adoptar la API | Contratos OpenAPI publicados temprano, *sandbox* y mock server. |
-| Ambigüedad normativa en periodicidades de revaluación | Parametrización total y validación con Riesgos antes de la F2. |
-| Disponibilidad de servicios externos (Fasecolda, RGM, SNR) | Integraciones desacopladas, colas, reintentos y proceso manual de contingencia. |
-| Cumplimiento CE 005/2019 en Azure | Involucrar a Seguridad de la Información y Riesgo Operacional desde el diseño. |
+| Alcance amplio para un MVP productivo | Priorización de la sección 16; entregas incrementales por módulo, con Cobertura, Reglas y Maestro primero. |
+| Dependencia de Appian, Flexcube, OnBase y FICO (equipos y tiempos distintos) | Contratos OpenAPI/AsyncAPI publicados temprano, *mocks* y pruebas de contrato; acuerdos de nivel de servicio entre equipos. |
+| Flexcube sin eventos nativos en Kafka | Adaptador o CDC; plan B con extracción diaria + consulta en línea (P-07). |
+| Indicadores y reglas sin definición de negocio | Fórmulas propuestas marcadas **[validar]**; talleres con Riesgos antes del sprint de M08/M14. |
+| Calidad de datos de Shivam | Perfilamiento temprano y ensayos de migración desde el sprint 2. |
+| Uso de cesantías FNA fuera del destino de vivienda | Validación jurídica (anexo C) y regla de idoneidad que bloquee los casos no permitidos. |
+| Cumplimiento CE 005/2019 (nube e IA) | Seguridad de la información y Riesgo Operacional desde el diseño. |
 
 ---
 
-## 13. Decisiones tomadas (con el negocio)
+## 19. Decisiones tomadas
 | # | Decisión |
 |---|---|
-| D-01 | La plataforma gestiona **garantías recibidas** por el Banco como respaldo de crédito (no garantías otorgadas). |
-| D-02 | Jurisdicción: **Colombia**, supervisión de la SFC. |
-| D-03 | Los tipos de garantía son **configurables** por el negocio, con campos personalizables. |
-| D-04 | El registro inicial llega de los **aplicativos de producto vía API**; también se permite carga masiva. |
-| D-05 | Se integra con **Kafka** para eventos. |
-| D-06 | Los vehículos se **revalúan anualmente con Fasecolda**. |
-| D-07 | Roles: Administrador, Gestor, Director, Consultor. |
-| D-08 | Se expone una **API de consulta** de estado, valor avaluado y fecha de avalúo para los aplicativos de producto. |
-| D-09 | Credicore es el motor de otorgamiento con el que se integra la plataforma. |
-| D-10 | Se **migra** desde el legado Shivam. |
-| D-11 | Nube: **Azure**; operación **24/7**; idioma **español**; stack moderno por definir (propuesta en la sección 7). |
-| D-12 | Se entrega por **MVP** y fases. |
-| D-13 | Se reporta el **avalúo catastral de los inmuebles** al IGAC / gestor catastral (P-01 resuelta). Las mobiliarias se inscriben en el RGM de Confecámaras. |
-| D-14 | La configuración de tipos, campos, flujos y documentos sigue el modelo del motor de parametrización de **Proceder** (P-02 resuelta). |
-| D-15 | **Tarjeta de crédito** es uno de los aplicativos de producto que registran garantías (P-03 resuelta). |
+| D-01 | Garantías **recibidas** como respaldo de crédito (no garantías otorgadas). |
+| D-02 | Jurisdicción **Colombia**, supervisión de la SFC. |
+| D-03 | Tipos de garantía **configurables** por el negocio, con campos personalizables (modelo Proceder). |
+| D-04 | Registro inicial desde los **aplicativos de producto vía API**; también carga masiva. |
+| D-05 | **Kafka** como backbone de eventos. |
+| D-06 | Vehículos revaluados **anualmente con Fasecolda**. |
+| D-07 | Niveles de rol: Administrador, Gestor, Director, Consultor (combinados con áreas, sección 4). |
+| D-08 | API de consulta de estado, valor avaluado y fecha de avalúo para los aplicativos. |
+| D-10 | **Migración** desde Shivam. |
+| D-11 | **Azure**, 24/7, español; backend **Java + Spring Boot**; **PostgreSQL**. |
+| D-13 | Reporte del **avalúo catastral** de inmuebles al IGAC / gestor catastral. |
+| D-15 | **Tarjeta de crédito** es aplicativo de origen. |
+| D-16 | **Appian** es la capa de procesos: tareas humanas, bandejas y aprobaciones. Garantías 360 es el maestro y valida cada transición. |
+| D-17 | Se construye directamente el **MVP productivo** (sin demo previa). |
+| D-18 | **OnBase** custodia los originales; **Azure Blob** guarda solo evidencias técnicas (snapshots, hashes, exportes). |
+| D-19 | **FICO** es el sistema de riesgo que consume la cobertura y toma la decisión final de riesgo. Reemplaza a Credicore como consumidor de Garantías 360. |
+| D-20 | **Flexcube** es el maestro de obligaciones, saldos y mora. |
+| D-21 | Nombre del producto: **Garantías 360**. Su visión (documento de prompt de visión) se incorpora a esta especificación. |
+| D-22 | **FNA** = Fondo Nacional del Ahorro. Se contemplan garantías sobre cesantías y ahorro en el FNA según el anexo C. |
 
 ---
 
-## 14. Preguntas abiertas y supuestos por validar
+## 20. Preguntas abiertas y supuestos
 
-| # | Pregunta / supuesto | Responsable sugerido |
+| # | Pregunta / supuesto | Responsable |
 |---|---|---|
-| P-01 | ~~Alcance del reporte al IGAC~~ → **Resuelta (D-13).** Sigue pendiente: norma o requerimiento exacto que origina el reporte, formato (estructura del archivo o servicio), periodicidad y destinatario (IGAC o cada gestor catastral según el municipio). | Jurídica / Negocio |
-| P-02 | ~~Capacidades de Proceder~~ → **Resuelta (D-14).** Revisado en el repositorio. Sigue pendiente: confirmar si en garantías hacen falta los tipos de dato adicionales (moneda, booleano, selección múltiple, referencia a catálogo) y la obligatoriedad por estado, que Proceder no tiene. | Negocio |
-| P-03 | ~~Significado de "TV"~~ → **Resuelta (D-15): tarjeta de crédito.** Sigue pendiente: la lista completa de aplicativos de producto que se integran en el MVP y qué garantías registra cada uno (p. ej., tarjeta de crédito: ¿CDT pignorado, FNG?). | Negocio |
-| P-04 | ¿El cliente o el beneficiario necesitan algún canal propio? (Supuesto: no; la plataforma es interna y se expone a los aplicativos vía API.) | Negocio |
-| P-05 | Estrategia de salida desde Shivam: ¿corte único o convivencia por producto? ¿Shivam expone base de datos o solo archivos? ¿Volumen de garantías y documentos? | TI / Negocio |
-| P-06 | Volúmenes: garantías vigentes, registros por día, usuarios concurrentes y picos (para dimensionar RNF-03). | Negocio / TI |
-| P-07 | Kafka: ¿cluster corporativo existente (Confluent, MSK, Event Hubs)? ¿Estándar de nombres de tópicos, formato (Avro / JSON) y Schema Registry? ¿Existen ya eventos de desembolso y cancelación de obligaciones? | Arquitectura TI |
-| P-08 | Core bancario: ¿cuál es y cómo se obtienen los saldos de las obligaciones (evento, API o archivo)? ¿Quién contabiliza las cuentas de orden de garantías? | TI / Contabilidad |
-| P-09 | Parámetros de Riesgos: porcentajes de admisibilidad por tipo, periodicidad de avalúo o actualización de inmuebles, índice a usar y descuentos por antigüedad del avalúo. | Riesgo de Crédito |
-| P-10 | Retención de la información y de la bitácora de auditoría (supuesto: 10 años). | Jurídica / Cumplimiento |
-| P-11 | RPO/RTO y ventanas de mantenimiento permitidas dentro del 24/7. | TI / Continuidad |
-| P-12 | ¿La plataforma consulta SARLAFT o lo hace el aplicativo de producto? ¿Qué proveedor de listas usa el Banco? | Cumplimiento |
-| P-13 | ¿Existe un gestor documental corporativo y un proveedor de firma electrónica que deban usarse? | TI |
-| P-14 | Listado de formatos regulatorios de la SFC que hoy se alimentan con información de garantías desde Shivam. | Regulatorio |
-| P-15 | Umbrales de maker–checker (monto o porcentaje de cambio de valor) y SLA de liberación. | Negocio / Riesgo |
+| P-01 | Reporte al IGAC: norma o requerimiento que lo origina, formato, periodicidad y destinatario (IGAC o gestor catastral por municipio). | Jurídica / Negocio |
+| P-03 | Lista de aplicativos de producto que se integran en el MVP y qué tipos de garantía registra cada uno. | Negocio |
+| P-05 | Salida desde Shivam: ¿corte único o por producto? ¿Acceso a la base de datos o a archivos? Volúmenes. | TI / Negocio |
+| P-06 | Volúmenes: garantías vigentes, obligaciones vinculadas, registros diarios, usuarios concurrentes. | Negocio / TI |
+| P-07 | Kafka: ¿cluster corporativo? ¿Estándares de tópicos y esquemas? ¿Flexcube publica eventos (nativo, CDC o adaptador)? | Arquitectura TI |
+| P-09 | Parámetros de Riesgos: haircuts, cobertura objetivo por producto, método de distribución, periodicidades de valoración, pesos del índice de salud, umbrales de brecha crítica. | Riesgo de Crédito |
+| P-10 | Retención (supuesto: 10 años). | Jurídica / Cumplimiento |
+| P-11 | RPO/RTO y ventanas de mantenimiento. | TI / Continuidad |
+| P-12 | SARLAFT: ¿qué servicio de listas y en qué fase? | Cumplimiento |
+| P-14 | Formatos regulatorios de la SFC que hoy se alimentan desde Shivam. | Regulatorio |
+| P-15 | Umbrales de maker–checker (cambio de valor) y SLA por etapa y de liberación. | Negocio / Riesgo |
 | P-16 | Aprobadores formales de este documento. | Dirección del proyecto |
-| P-17 | Stack tecnológico: ¿aprueba Arquitectura la propuesta (Java/Spring Boot + Next.js + PostgreSQL en Azure), o prefiere .NET, o un backend en TypeScript (NestJS) para reutilizar más código de Proceder? | Arquitectura TI |
-| P-18 | Metodología: ¿se descompone esta especificación en `specs/RF-xx/spec.md` con criterios de aceptación en formato EARS, como en Proceder (lineamientos de la fábrica IngenIA), antes de construir? | Dirección del proyecto |
+| P-18 | ¿Se descompone la especificación en `specs/RF-xx/spec.md` en formato EARS (metodología de la fábrica IngenIA)? | Dirección del proyecto |
+| P-19 | Manual de marca oficial de Banco Popular (colores, tipografía, logos, iconografía). | Mercadeo |
+| P-20 | Motor de reglas: ¿DMN embebido (propuesta) o una herramienta corporativa de reglas existente? | Arquitectura TI |
+| P-21 | Appian: ¿procesos ya existentes que se reutilizan? ¿Versión y mecanismo de integración (REST, conectores Kafka)? ¿El maker–checker de configuración y reglas vive en Garantías 360 (supuesto R-04)? | Arquitectura / BPM |
+| P-22 | OnBase: ¿API disponible para cargar y consultar, tipos documentales existentes para garantías, y posibilidad de guardar el hash como metadato? | ECM |
+| P-23 | FICO: ¿qué producto y qué interfaz (evento, API, archivo) consume la cobertura? ¿Con qué frecuencia? | Riesgos / TI |
+| P-24 | FNA — ver las preguntas del anexo C (legalidad del caso de libranza, AVC y convenio con el FNA). | Jurídica / Negocio |
+| P-25 | Asistente IA: ¿qué modelo o servicio de IA está aprobado por el Banco y bajo qué política interna de IA? | Arquitectura / Riesgo Operacional |
 
 ---
 
-## 15. Control de cambios
+## 21. Control de cambios
 | Versión | Fecha | Autor | Cambio |
 |---|---|---|---|
 | 0.1 | 2026-09-25 | Equipo de proyecto | Versión inicial a partir del levantamiento con el negocio. |
-| 0.2 | 2026-09-25 | Equipo de proyecto | Reporte del avalúo catastral al IGAC (N-18, RF-508/509, RF-703); tarjeta de crédito como producto de origen; M1 rediseñado sobre el motor de parametrización de Proceder (campos reutilizables, flujos versionados con macroestados, documentos no retroactivos); carga masiva con el asistente de Proceder; alineación del stack de front. |
+| 0.2 | 2026-09-25 | Equipo de proyecto | Avalúo catastral al IGAC; tarjeta de crédito; motor de parametrización basado en Proceder; carga masiva con el asistente de Proceder. |
+| 0.3 | 2026-09-25 | Equipo de proyecto | Incorporación de la visión Garantías 360: principio de maestro con Appian, Flexcube, OnBase y FICO (D-16 a D-20); módulos de centro de mando, estudio jurídico, constitución, cobertura explicable (anexo A), core transaccional, monitoreo con conciliación, ejecución, liberación, cumplimiento SFC, motor de reglas no-code (anexo B), auditoría encadenada por hash, Expediente 360 y asistente IA (F2); garantías FNA (anexo C, N-19/N-20); RUNT y finanzas abiertas; estrategia de pruebas, observabilidad e integridad; MVP productivo (D-17). |
