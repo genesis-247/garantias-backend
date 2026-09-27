@@ -14,15 +14,18 @@ if (-not (Test-Path $front)) { throw "No encuentro $front. Clona garantias-front
 
 if ($BaseReal) {
   if (-not $env:G360_DB_URL) { throw "Define G360_DB_URL, G360_DB_USUARIO y G360_DB_CLAVE para usar la base real." }
-  $argumentos = "--spring.profiles.active=local"
+  $env:SPRING_PROFILES_ACTIVE = "local"
+  $env:G360_DB_EMBEBIDA = "false"
   Write-Host "Backend contra la base real: $env:G360_DB_URL"
 } else {
-  $argumentos = "--spring.profiles.active=demo --g360.db.embebida=true"
+  $env:SPRING_PROFILES_ACTIVE = "demo"
+  $env:G360_DB_EMBEBIDA = "true"
   Write-Host "Backend con PostgreSQL embebido (datos en $HOME\.garantias360\postgres)"
 }
 
 $log = Join-Path $env:TEMP "garantias360-backend.log"
-Start-Process -FilePath (Join-Path $back "gradlew.bat") -ArgumentList "bootRun", "--args=`"$argumentos`"" `
+# La configuración va por variables de entorno (sin comillas anidadas que cmd.exe pueda alterar).
+Start-Process -FilePath (Join-Path $back "gradlew.bat") -ArgumentList "bootRun" `
   -WorkingDirectory $back -RedirectStandardOutput $log -WindowStyle Minimized
 Write-Host "Esperando el backend (la primera vez descarga dependencias y carga datos demo; puede tardar unos minutos)…"
 $listo = $false

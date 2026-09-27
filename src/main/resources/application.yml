@@ -69,5 +69,8 @@ g360:
   trm:
     USD: '4000'
     EUR: '4350'
+  db:
+    # true = PostgreSQL embebido para desarrollo local (sin Docker ni instalación). Ver local/iniciar.*
+    embebida: ${G360_DB_EMBEBIDA:false}
   demo:
     cargar: ${G360_DEMO_CARGAR:false}

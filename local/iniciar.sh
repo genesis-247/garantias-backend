@@ -11,15 +11,15 @@ for c in java node npm; do command -v $c >/dev/null || { echo "Falta '$c'. Insta
 
 if [ "${1:-}" = "--base-real" ]; then
   : "${G360_DB_URL:?Define G360_DB_URL, G360_DB_USUARIO y G360_DB_CLAVE}"
-  ARGS="--spring.profiles.active=local"
+  export SPRING_PROFILES_ACTIVE=local G360_DB_EMBEBIDA=false
   echo "Backend contra la base real: $G360_DB_URL"
 else
-  ARGS="--spring.profiles.active=demo --g360.db.embebida=true"
+  export SPRING_PROFILES_ACTIVE=demo G360_DB_EMBEBIDA=true
   echo "Backend con PostgreSQL embebido (datos en ~/.garantias360/postgres)"
 fi
 
 LOG=${TMPDIR:-/tmp}/garantias360-backend.log
-(cd "$BACK" && ./gradlew bootRun --args="$ARGS" > "$LOG" 2>&1) &
+(cd "$BACK" && ./gradlew bootRun > "$LOG" 2>&1) &
 BACK_PID=$!
 trap 'kill $BACK_PID 2>/dev/null' EXIT
 echo "Esperando el backend (la primera vez descarga dependencias y carga datos demo)…"
