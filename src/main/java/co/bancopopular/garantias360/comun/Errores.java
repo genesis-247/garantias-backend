@@ -3,12 +3,14 @@ package co.bancopopular.garantias360.comun;
 import co.bancopopular.garantias360.reglas.motor.ReglaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +78,17 @@ public class Errores {
                 .map(f -> f.getField() + ": " + f.getDefaultMessage())
                 .toList();
         return problema(HttpStatus.UNPROCESSABLE_ENTITY, "DATOS_INVALIDOS", "La petición tiene datos inválidos", detalles);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ProblemDetail ilegible(HttpMessageNotReadableException e) {
+        return problema(HttpStatus.BAD_REQUEST, "CUERPO_INVALIDO",
+                "El cuerpo de la petición no es un JSON válido o no tiene el formato esperado", List.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ProblemDetail archivoGrande(MaxUploadSizeExceededException e) {
+        return problema(HttpStatus.PAYLOAD_TOO_LARGE, "ARCHIVO_GRANDE", "El archivo supera el tamaño máximo permitido", List.of());
     }
 
     @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})

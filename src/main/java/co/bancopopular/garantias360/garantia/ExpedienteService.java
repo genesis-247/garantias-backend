@@ -5,6 +5,7 @@ import co.bancopopular.garantias360.cobertura.CalculoCobertura;
 import co.bancopopular.garantias360.cobertura.CoberturaRepositorios;
 import co.bancopopular.garantias360.cobertura.CoberturaVigente;
 import co.bancopopular.garantias360.configuracion.TipoGarantiaService;
+import co.bancopopular.garantias360.constitucion.ConstitucionService;
 import co.bancopopular.garantias360.obligacion.Obligacion;
 import co.bancopopular.garantias360.obligacion.ObligacionRepositorio;
 import co.bancopopular.garantias360.tablero.AlertaService;
@@ -34,12 +35,14 @@ public class ExpedienteService {
     private final AuditoriaService auditoria;
     private final AlertaService alertas;
     private final JdbcTemplate jdbc;
+    private final ConstitucionService constitucion;
 
     public ExpedienteService(Repositorios.Garantias garantias, Repositorios.Participantes participantes,
                              Repositorios.Vinculos vinculos, Repositorios.Valoraciones valoraciones,
                              ObligacionRepositorio obligaciones, CoberturaRepositorios.Vigentes vigentes,
                              CoberturaRepositorios.Calculos calculos, TipoGarantiaService tipos,
-                             AuditoriaService auditoria, AlertaService alertas, JdbcTemplate jdbc) {
+                             AuditoriaService auditoria, AlertaService alertas, JdbcTemplate jdbc,
+                             ConstitucionService constitucion) {
         this.garantias = garantias;
         this.participantes = participantes;
         this.vinculos = vinculos;
@@ -51,6 +54,7 @@ public class ExpedienteService {
         this.auditoria = auditoria;
         this.alertas = alertas;
         this.jdbc = jdbc;
+        this.constitucion = constitucion;
     }
 
     public record Filtros(String texto, String tipo, Macroestado macroestado, String idoneidad, String segmento,
@@ -144,6 +148,8 @@ public class ExpedienteService {
         e.put("tipoVersion", tipo.version().numero);
         e.put("campos", tipo.campos());
         e.put("siguientesEstados", g.macroestado.siguientes());
+        e.put("checklistJuridico", tipos.checklist(tipo.version()));
+        e.put("constitucion", constitucion.plan(g.codigo));
         e.put("participantes", participantes.findByGarantiaId(g.id));
         e.put("obligaciones", obligacionesVista);
         e.put("valoraciones", valoraciones.findByGarantiaIdOrderByFechaDescCreatedAtDesc(g.id));

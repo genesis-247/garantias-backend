@@ -3,6 +3,8 @@ package co.bancopopular.garantias360.demo;
 import co.bancopopular.garantias360.configuracion.CampoDefinicion;
 import co.bancopopular.garantias360.configuracion.CampoDefinicion.Opcion;
 import co.bancopopular.garantias360.configuracion.CampoDefinicion.TipoCampo;
+import co.bancopopular.garantias360.configuracion.DefinicionTipo.ItemChecklist;
+import co.bancopopular.garantias360.configuracion.DefinicionTipo.PlantillaActividad;
 import co.bancopopular.garantias360.configuracion.TipoGarantiaService.NuevoTipo;
 import co.bancopopular.garantias360.reglas.ReglaService.NuevaRegla;
 import co.bancopopular.garantias360.reglas.motor.TablaDecision;
@@ -60,7 +62,102 @@ public final class CatalogoDemo {
     private static final CampoDefinicion FOLIO_RGM = texto("folioRgm", "Folio electrónico RGM", true, "PERFECCIONAMIENTO",
             false, "Registro", 80, null, "Número de inscripción en el Registro de Garantías Mobiliarias (Confecámaras)");
 
+    // ------------------------------------------------------------------ checklist jurídico y plantilla de constitución
+
+    private static ItemChecklist item(String codigo, String descripcion, boolean obligatorio) {
+        return new ItemChecklist(codigo, descripcion, obligatorio, null);
+    }
+
+    private static PlantillaActividad act(int orden, String codigo, String nombre, boolean obligatoria, boolean evidencia,
+                                          int dias, String rol, String... campos) {
+        return new PlantillaActividad(codigo, nombre, null, orden, obligatoria, evidencia, dias, rol, List.of(campos));
+    }
+
+    private static final String OPS = "OPERACIONES_GESTOR";
+    private static final String JUR = "JURIDICA_GESTOR";
+    private static final ItemChecklist FACULTADES = item("FACULTADES", "Capacidad y facultades de quien constituye la garantía", true);
+    private static final PlantillaActividad FIRMA = act(10, "FIRMA_DOCUMENTOS", "Firma de documentos de la garantía", true, true, 5, OPS);
+
+    private static final Map<String, List<ItemChecklist>> CHECKLIST = Map.ofEntries(
+            Map.entry("REAL_INMUEBLE", List.of(
+                    item("TITULOS_10_ANIOS", "Estudio de títulos a 10 años o más", true),
+                    item("CERTIFICADO_TRADICION", "Certificado de tradición con vigencia no mayor a 30 días", true),
+                    item("LIMITACIONES_DOMINIO", "Sin limitaciones al dominio, embargos ni demandas inscritas", true),
+                    item("VIVIENDA_FAMILIAR", "Afectación a vivienda familiar o patrimonio de familia", true),
+                    FACULTADES)),
+            Map.entry("VEHICULO", List.of(
+                    item("HISTORIAL_RUNT", "Historial del vehículo en el RUNT", true),
+                    item("PRENDAS_PREVIAS", "Sin prendas ni garantías mobiliarias previas en el RGM", true),
+                    item("COMPARENDOS", "Comparendos e impuestos vehiculares al día", false), FACULTADES)),
+            Map.entry("MOBILIARIA", List.of(
+                    item("CONTRATO_FUENTE", "Contrato o título fuente de los bienes o derechos", true),
+                    item("CESIBILIDAD", "Cesibilidad o gravabilidad de los bienes o derechos", true),
+                    item("GARANTIAS_PREVIAS_RGM", "Consulta de garantías previas en el RGM", true), FACULTADES)),
+            Map.entry("CESANTIAS", List.of(
+                    item("AUTORIZACION_ESCRITA", "Autorización escrita del trabajador (CST art. 256)", true),
+                    item("DESTINO_VIVIENDA", "Destino del crédito: vivienda (Ley 50/1990 art. 104)", true),
+                    item("SIN_PIGNORACION_FNA", "Sin pignoración vigente de las cesantías con el FNA", true))),
+            Map.entry("GENERAL", List.of(FACULTADES)));
+
+    private static final Map<String, List<PlantillaActividad>> PLANTILLAS = Map.ofEntries(
+            Map.entry("HIPOTECA", List.of(FIRMA,
+                    act(20, "ESCRITURA_PUBLICA", "Otorgamiento de la escritura pública de hipoteca", true, true, 15, OPS, "numeroEscritura", "notaria"),
+                    act(30, "PAGO_DERECHOS_REGISTRO", "Pago de derechos de registro y boleta fiscal", true, true, 20, OPS),
+                    act(40, "REGISTRO_ORIP", "Radicación y registro en la ORIP", true, true, 30, OPS),
+                    act(50, "POLIZA_INCENDIO_TERREMOTO", "Constitución o endoso de la póliza de incendio y terremoto", true, true, 30, OPS, "polizaVigente"),
+                    act(60, "CERTIFICADO_TRADICION", "Certificado de tradición con la hipoteca anotada", true, true, 35, JUR))),
+            Map.entry("VEHICULO", List.of(FIRMA,
+                    act(20, "INSCRIPCION_RGM", "Inscripción en el RGM (formulario de registro inicial)", true, true, 10, OPS, "folioRgm"),
+                    act(30, "ANOTACION_RUNT", "Anotación de la garantía en el organismo de tránsito (RUNT)", true, true, 20, OPS),
+                    act(40, "POLIZA_TODO_RIESGO", "Póliza todo riesgo con el Banco como beneficiario", true, true, 20, OPS, "polizaVigente"))),
+            Map.entry("MOBILIARIA_OTROS", List.of(FIRMA,
+                    act(20, "INSCRIPCION_RGM", "Inscripción en el RGM (formulario de registro inicial)", true, true, 10, OPS, "folioRgm"),
+                    act(30, "INSCRIPCION_CAMARA", "Inscripción en la Cámara de Comercio", false, true, 20, OPS))),
+            Map.entry("DERECHOS_COBRO", List.of(FIRMA,
+                    act(20, "INSCRIPCION_RGM", "Inscripción en el RGM (formulario de registro inicial)", true, true, 10, OPS, "folioRgm"),
+                    act(30, "NOTIFICACION_DEUDOR_CEDIDO", "Notificación al deudor cedido", true, true, 15, JUR, "notificacionDeudorCedido"))),
+            Map.entry("DEPOSITO_CDT", List.of(FIRMA,
+                    act(20, "PIGNORACION_TITULO", "Marcación de la pignoración del CDT", true, true, 3, OPS))),
+            Map.entry("DEPOSITO_AHORRO", List.of(FIRMA,
+                    act(20, "BLOQUEO_CUENTA", "Bloqueo de la cuenta en garantía", true, true, 3, OPS))),
+            Map.entry("FNG", List.of(
+                    act(10, "CERTIFICADO_FNG", "Confirmación o expedición del certificado FNG", true, true, 5, OPS))),
+            Map.entry("FAG", List.of(
+                    act(10, "CERTIFICADO_FAG", "Confirmación o expedición del certificado FAG", true, true, 5, OPS))),
+            Map.entry("CESANTIAS_FNA", List.of(
+                    act(10, "AUTORIZACION_TRABAJADOR", "Autorización escrita del trabajador", true, true, 3, OPS, "autorizacionEscrita"),
+                    act(20, "RADICACION_FNA", "Envío al FNA de la copia de la libranza o del pagaré", true, true, 10, OPS, "radicacionFna"),
+                    act(30, "CONFIRMACION_FNA", "Confirmación de la pignoración por el FNA", true, true, 25, OPS, "confirmacionFna"))),
+            Map.entry("FIDUCIA", List.of(
+                    act(10, "CONTRATO_FIDUCIA", "Constitución del contrato de fiducia en garantía", true, true, 15, JUR),
+                    act(20, "CERTIFICADO_GARANTIA", "Expedición del certificado de garantía fiduciaria", true, true, 25, OPS, "certificadoGarantia"))),
+            Map.entry("PIGNORACION_RENTAS", List.of(FIRMA,
+                    act(20, "NOTIFICACION_PAGADOR", "Notificación a la entidad pagadora de las rentas", true, true, 10, OPS))),
+            Map.entry("PAGARE", List.of(
+                    act(10, "FIRMA_PAGARE", "Firma del pagaré y carta de instrucciones", true, true, 3, OPS),
+                    act(20, "DESMATERIALIZACION", "Desmaterialización y custodia en Deceval", false, true, 10, OPS))),
+            Map.entry("AVAL", List.of(FIRMA)));
+
+    private static String checklistDe(NuevoTipo t) {
+        return switch (t.clase()) {
+            case "REAL_INMUEBLE", "VEHICULO" -> t.clase();
+            case "MOBILIARIA" -> "MOBILIARIA";
+            default -> "CESANTIAS_FNA".equals(t.codigo()) ? "CESANTIAS" : "GENERAL";
+        };
+    }
+
+    private static String plantillaDe(NuevoTipo t) {
+        return t.codigo().startsWith("HIPOTECA") ? "HIPOTECA" : t.codigo();
+    }
+
+    /** Catálogo inicial con su checklist jurídico y su plantilla de constitución (RF-1606, RF-1608). */
     public static List<NuevoTipo> tipos() {
+        return tiposBase().stream()
+                .map(t -> t.con(CHECKLIST.get(checklistDe(t)), PLANTILLAS.getOrDefault(plantillaDe(t), List.of(FIRMA))))
+                .toList();
+    }
+
+    private static List<NuevoTipo> tiposBase() {
         List<CampoDefinicion> inmueble = List.of(
                 texto("matriculaInmobiliaria", "Matrícula inmobiliaria", true, null, true, "Inmueble", 1, "^\\d{2,3}[A-Z]?-\\d{1,8}$", "Formato 050-1234567 o 50C-1234567"),
                 texto("direccion", "Dirección", true, null, false, "Inmueble", 2, null, null),

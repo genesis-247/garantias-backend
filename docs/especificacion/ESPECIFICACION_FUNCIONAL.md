@@ -3,8 +3,8 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 0.3 — Borrador para validación |
-| Fecha | 2026-09-25 |
+| Versión | 0.4 — Borrador para validación |
+| Fecha | 2026-09-27 |
 | Estado | En revisión (Negocio, Riesgo de Crédito, Jurídica, Cumplimiento, Arquitectura TI) |
 | Alcance de esta versión | MVP productivo + fases posteriores |
 | Anexos | [A — Motor de cobertura](ANEXO_A_MOTOR_COBERTURA.md) · [B — Motor de reglas](ANEXO_B_MOTOR_REGLAS.md) · [C — Garantías sobre cesantías y ahorro en el FNA](ANEXO_C_FNA.md) |
@@ -416,7 +416,7 @@ Especificación detallada, ciclo de vida, lenguaje de fórmulas y ejemplos: **[A
 
 ### M16 — Configuración de tipos de garantía
 
-> Reutiliza el modelo del motor de parametrización de **Proceder** (`genesis-247/factory-plataforma-proceder-legal`, RF-03): campos reutilizables, versiones inmutables, identidad estable de estados y opciones, documentos no retroactivos, y columnas relacionales + JSONB. Las extensiones propias de Garantías 360 se marcan como **[G360]**.
+> Principios del motor de parametrización: campos reutilizables, versiones inmutables, identidad estable de estados y opciones, documentos no retroactivos, y columnas relacionales + JSONB. Los requisitos específicos del dominio de garantías se marcan como **[G360]**.
 
 | ID | Requisito | Prioridad | Norma |
 |---|---|---|---|
@@ -436,7 +436,7 @@ Especificación detallada, ciclo de vida, lenguaje de fórmulas y ejemplos: **[A
 |---|---|---|
 | RF-1701 | API REST de registro para los aplicativos de producto, **idempotente** (`Idempotency-Key`), validada contra el JSON Schema del tipo, con errores estructurados por campo (RFC 9457). Responde el ID `GAR-…` y el estado. | MVP |
 | RF-1702 | Registro asíncrono alterno por evento Kafka de los aplicativos que lo prefieran. | F2 |
-| RF-1703 | Carga masiva con el asistente de 4 pasos de Proceder (RF-17): plantilla por tipo, validación de estructura, reporte de errores por fila, confirmación aparte para las filas que actualizan registros existentes, aprobación maker–checker. También neutraliza fórmulas incrustadas en el archivo, tiene límites de tamaño y tiempo, y deja historial auditable. | MVP |
+| RF-1703 | Carga masiva con un asistente de 4 pasos: plantilla por tipo, validación de estructura, reporte de errores por fila, confirmación aparte para las filas que actualizan registros existentes, aprobación maker–checker. También neutraliza fórmulas incrustadas en el archivo, tiene límites de tamaño y tiempo, y deja historial auditable. | MVP |
 | RF-1704 | Captura manual en la interfaz para casos excepcionales, con formulario dinámico. | MVP |
 
 ### M18 — Seguros
@@ -618,7 +618,7 @@ Ver M21. Tópicos propuestos: `bp.garantias.garantia.v1`, `bp.garantias.cobertur
 |---|---|
 | Backend | **Java 21 + Spring Boot 3**, monolito modular por dominios (maestro, jurídico, valoración, cobertura, reglas, eventos, auditoría), listo para extraer servicios. |
 | Motor de reglas | **Tablas de decisión DMN con expresiones FEEL** (motor DMN embebido) y un editor no-code propio. Detalle en el anexo B; decisión final en P-20. |
-| Frontend | **Next.js + TypeScript + Tailwind + shadcn/ui**, React Hook Form + Zod y TanStack Query (mismo stack de front que Proceder), con el sistema de diseño de Banco Popular. |
+| Frontend | **Next.js + TypeScript + Tailwind + shadcn/ui**, React Hook Form + Zod y TanStack Query, con el sistema de diseño de Banco Popular. |
 | Base de datos maestra | **Azure Database for PostgreSQL – Flexible Server**, zona redundante; JSONB para campos configurables. |
 | Documentos | **OnBase** (originales) + **Azure Blob privado inmutable** (evidencias técnicas). |
 | Integración | APIs REST (**OpenAPI**) vía **Azure API Management**; **Kafka** (**AsyncAPI**) + Schema Registry. |
@@ -730,7 +730,7 @@ Por la Ley 1581 (N-11), los ambientes no productivos usan **solo datos sintétic
 |---|---|
 | D-01 | Garantías **recibidas** como respaldo de crédito (no garantías otorgadas). |
 | D-02 | Jurisdicción **Colombia**, supervisión de la SFC. |
-| D-03 | Tipos de garantía **configurables** por el negocio, con campos personalizables (modelo Proceder). |
+| D-03 | Tipos de garantía **configurables** por el negocio, con campos personalizables y versionados (M16). |
 | D-04 | Registro inicial desde los **aplicativos de producto vía API**; también carga masiva. |
 | D-05 | **Kafka** como backbone de eventos. |
 | D-06 | Vehículos revaluados **anualmente con Fasecolda**. |
@@ -774,6 +774,7 @@ Por la Ley 1581 (N-11), los ambientes no productivos usan **solo datos sintétic
 | P-23 | FICO: ¿qué producto y qué interfaz (evento, API, archivo) consume la cobertura? ¿Con qué frecuencia? | Riesgos / TI |
 | P-24 | FNA — ver las preguntas del anexo C (legalidad del caso de libranza, AVC y convenio con el FNA). | Jurídica / Negocio |
 | P-25 | Asistente IA: ¿qué modelo o servicio de IA está aprobado por el Banco y bajo qué política interna de IA? | Arquitectura / Riesgo Operacional |
+| P-26 | **[SUPUESTO]** Cuando un usuario autenticado por Entra ID está registrado en la administración de usuarios de Garantías 360 (M24), sus roles efectivos son los de sus perfiles; si no está registrado, se usan los app roles del token. ¿Se mantiene este modelo o los perfiles se administran solo como grupos de Entra ID? | Seguridad de la información / Arquitectura |
 
 ---
 
@@ -781,5 +782,6 @@ Por la Ley 1581 (N-11), los ambientes no productivos usan **solo datos sintétic
 | Versión | Fecha | Autor | Cambio |
 |---|---|---|---|
 | 0.1 | 2026-09-25 | Equipo de proyecto | Versión inicial a partir del levantamiento con el negocio. |
-| 0.2 | 2026-09-25 | Equipo de proyecto | Avalúo catastral al IGAC; tarjeta de crédito; motor de parametrización basado en Proceder; carga masiva con el asistente de Proceder. |
+| 0.2 | 2026-09-25 | Equipo de proyecto | Avalúo catastral al IGAC; tarjeta de crédito; motor de parametrización de tipos de garantía; asistente de carga masiva. |
 | 0.3 | 2026-09-25 | Equipo de proyecto | Incorporación de la visión Garantías 360: principio de maestro con Appian, Flexcube, OnBase y FICO (D-16 a D-20); módulos de centro de mando, estudio jurídico, constitución, cobertura explicable (anexo A), core transaccional, monitoreo con conciliación, ejecución, liberación, cumplimiento SFC, motor de reglas no-code (anexo B), auditoría encadenada por hash, Expediente 360 y asistente IA (F2); garantías FNA (anexo C, N-19/N-20); RUNT y finanzas abiertas; estrategia de pruebas, observabilidad e integridad; MVP productivo (D-17). |
+| 0.4 | 2026-09-27 | Equipo de proyecto | Incremento 2: configuración de tipos con maker–checker, plan de constitución por garantía, carga masiva con asistente de 4 pasos, captura manual y administración de usuarios y perfiles (P-26). |

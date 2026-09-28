@@ -2,7 +2,10 @@ package co.bancopopular.garantias360.demo;
 
 import co.bancopopular.garantias360.cobertura.CoberturaService;
 import co.bancopopular.garantias360.comun.Contexto;
+import co.bancopopular.garantias360.carga.CargaMasivaService;
 import co.bancopopular.garantias360.comun.Json;
+import co.bancopopular.garantias360.constitucion.ActividadConstitucion;
+import co.bancopopular.garantias360.constitucion.ConstitucionService;
 import co.bancopopular.garantias360.configuracion.TipoGarantiaService;
 import co.bancopopular.garantias360.garantia.GarantiaDtos.*;
 import co.bancopopular.garantias360.garantia.GarantiaService;
@@ -18,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -40,6 +44,7 @@ import java.util.function.Supplier;
  */
 @Component
 @Profile("demo")
+@Order(10)
 public class DatosDemo implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DatosDemo.class);
@@ -52,6 +57,8 @@ public class DatosDemo implements ApplicationRunner {
     private final CoberturaService cobertura;
     private final Repositorios.Garantias repo;
     private final JdbcTemplate jdbc;
+    private final ConstitucionService constitucion;
+    private final CargaMasivaService cargas;
     private final int cantidad;
     private final Random rnd = new Random(360);
     private final LocalDate hoy = LocalDate.now(BOGOTA);
@@ -59,6 +66,7 @@ public class DatosDemo implements ApplicationRunner {
 
     public DatosDemo(TipoGarantiaService tipos, ReglaService reglas, GarantiaService garantias, FlexcubeService flexcube,
                      CoberturaService cobertura, Repositorios.Garantias repo, JdbcTemplate jdbc,
+                     ConstitucionService constitucion, CargaMasivaService cargas,
                      @Value("${g360.demo.cantidad:140}") int cantidad) {
         this.tipos = tipos;
         this.reglas = reglas;
@@ -67,6 +75,8 @@ public class DatosDemo implements ApplicationRunner {
         this.cobertura = cobertura;
         this.repo = repo;
         this.jdbc = jdbc;
+        this.constitucion = constitucion;
+        this.cargas = cargas;
         this.cantidad = cantidad;
     }
 
@@ -77,7 +87,7 @@ public class DatosDemo implements ApplicationRunner {
             return;
         }
         long inicio = System.currentTimeMillis();
-        como("admin.funcional", () -> CatalogoDemo.tipos().stream().map(tipos::crear).toList(), Roles.ADMIN_FUNCIONAL);
+        publicarTipos();
         cargarReglas();
         casosDeVision();
         for (int i = 0; i < cantidad; i++) {
@@ -85,7 +95,55 @@ public class DatosDemo implements ApplicationRunner {
         }
         como("motor.nocturno", () -> cobertura.recalcularPortafolio("CARGA_INICIAL_DEMO"), Roles.SISTEMA);
         historicoIndicadores();
+        cargaMasivaPendiente();
         log.info("Datos demo cargados en {} s", (System.currentTimeMillis() - inicio) / 1000);
+    }
+
+    // ------------------------------------------------------------------ tipos con maker–checker (RF-1607)
+
+    private void publicarTipos() {
+        for (var nuevo : CatalogoDemo.tipos()) {
+            como("admin.funcional", () -> {
+                tipos.crear(nuevo);
+                return tipos.enviar(nuevo.codigo(), 1);
+            }, Roles.ADMIN_FUNCIONAL);
+            como("admin.aprobadora", () -> tipos.aprobar(nuevo.codigo(), 1), Roles.ADMIN_FUNCIONAL);
+        }
+        // Una versión 2 del vehículo queda en revisión para mostrar el flujo: agrega el color y el VIN.
+        como("admin.funcional", () -> {
+            var v = tipos.nuevaVersion("VEHICULO");
+            var e = tipos.edicion(v);
+            List<co.bancopopular.garantias360.configuracion.CampoDefinicion> campos = new ArrayList<>(e.campos());
+            campos.add(new co.bancopopular.garantias360.configuracion.CampoDefinicion("vin", "VIN (número de identificación vehicular)",
+                    co.bancopopular.garantias360.configuracion.CampoDefinicion.TipoCampo.TEXTO, false, null, false, "Vehículo", 7,
+                    "17 caracteres", null, null, "^[A-HJ-NPR-Z0-9]{17}$", null));
+            campos.add(new co.bancopopular.garantias360.configuracion.CampoDefinicion("color", "Color",
+                    co.bancopopular.garantias360.configuracion.CampoDefinicion.TipoCampo.TEXTO, false, null, false, "Vehículo", 8,
+                    null, null, null, null, null));
+            tipos.editar("VEHICULO", v.numero, new co.bancopopular.garantias360.configuracion.DefinicionTipo.Edicion(
+                    e.comportamiento(), campos, e.checklistJuridico(), e.actividades()));
+            return tipos.enviar("VEHICULO", v.numero);
+        }, Roles.ADMIN_FUNCIONAL);
+    }
+
+    // ------------------------------------------------------------------ carga masiva pendiente de aprobación (RF-1703)
+
+    private void cargaMasivaPendiente() {
+        String[] columnas = {"referencia", "clienteTipoDocumento", "clienteNumeroDocumento", "clienteNombre", "producto", "segmento",
+                "numeroObligacion", "valorComercial", "fechaValoracion", "tipoValoracion", "numeroTitulo", "fechaVencimiento"};
+        StringBuilder csv = new StringBuilder(String.join(";", columnas)).append('\n');
+        for (int i = 0; i < 6; i++) {
+            long valor = 5_000_000L + i * 2_500_000L;
+            csv.append(String.join(";", "TC-LOTE-" + (501 + i), "CC", String.valueOf(1_030_500_100 + i * 7919),
+                    persona().nombre(), "TARJETA_CREDITO", "PERSONAS", "TC-4509-" + (7001 + i), String.valueOf(valor),
+                    hoy.minusDays(3).toString(), "SALDO_CERTIFICADO", "CDT-LOTE-" + (88100 + i),
+                    // La fila 5 trae una fecha inválida para mostrar el reporte de errores por fila.
+                    i == 4 ? "31/02/2027" : hoy.plusMonths(12).toString())).append('\n');
+        }
+        como("operaciones.pedro", () -> {
+            var carga = cargas.crear("DEPOSITO_CDT", "cdt-tarjetas-lote-septiembre.csv", csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return cargas.enviar((UUID) carga.get("id"), false, true);
+        }, Roles.OPERACIONES_GESTOR);
     }
 
     // ------------------------------------------------------------------ reglas con maker–checker
@@ -257,18 +315,18 @@ public class DatosDemo implements ApplicationRunner {
             registrarHasta(c, Macroestado.REGISTRO);
         } else if (destino < 8) {
             registrarHasta(c, Macroestado.ESTUDIO_JURIDICO);
-        } else if (destino < 11) {
+        } else if (destino < 15) {
             registrarHasta(c, Macroestado.CONSTITUCION);
         } else {
             String codigo = activar(c);
-            if (destino < 15) {
+            if (destino < 19) {
                 cancelar(c);
-            } else if (destino < 17) {
+            } else if (destino < 21) {
                 cancelar(c);
                 como("operaciones.directora", () -> garantias.transicion(codigo,
                         new Transicion(Macroestado.CIERRE, "Paz y salvo emitido, cancelación registrada y documentos entregados", false)),
                         Roles.OPERACIONES_DIRECTOR);
-            } else if (destino < 19) {
+            } else if (destino < 23) {
                 mora(c, 120 + rnd.nextInt(200));
                 como("juridica.directora", () -> garantias.transicion(codigo,
                         new Transicion(Macroestado.EJECUCION, "Incumplimiento superior a 120 días; se inicia cobro judicial", false)),
@@ -338,6 +396,7 @@ public class DatosDemo implements ApplicationRunner {
         }
         como("operaciones.pedro", () -> garantias.transicion(codigo, new Transicion(Macroestado.CONSTITUCION, null, false)),
                 Roles.OPERACIONES_GESTOR);
+        avanzarPlan(codigo, c, hasta == Macroestado.CONSTITUCION);
         if (hasta == Macroestado.CONSTITUCION) {
             return codigo;
         }
@@ -345,6 +404,37 @@ public class DatosDemo implements ApplicationRunner {
         como("operaciones.pedro", () -> garantias.perfeccionar(codigo, new Perfeccionamiento(constitucion,
                 constitucion.plusDays(5 + rnd.nextInt(25)), c.registro.isEmpty() ? null : c.registro)), Roles.OPERACIONES_GESTOR);
         return codigo;
+    }
+
+    /** Avanza el plan de constitución: completo antes de perfeccionar o parcial para la bandeja de M06. */
+    private void avanzarPlan(String codigo, Caso c, boolean parcial) {
+        List<ActividadConstitucion> plan = constitucion.plan(codigo).actividades();
+        int hasta = parcial ? rnd.nextInt(Math.max(plan.size(), 1)) : plan.size();
+        for (int i = 0; i < plan.size(); i++) {
+            ActividadConstitucion a = plan.get(i);
+            if (i < hasta) {
+                ObjectNode datos = Json.CANONICO.createObjectNode();
+                a.campos.forEach(x -> {
+                    String campo = x.asText();
+                    if (c.registro.has(campo)) {
+                        datos.set(campo, c.registro.get(campo));
+                    } else if (c.atributos.has(campo)) {
+                        datos.set(campo, c.atributos.get(campo));
+                    }
+                });
+                String ref = "OB-" + (4_100_000 + rnd.nextInt(900_000));
+                String estado = !a.obligatoria && rnd.nextInt(3) == 0 ? "NO_APLICA" : "COMPLETADA";
+                como("operaciones.pedro", () -> constitucion.actualizar(codigo, a.codigo, new ConstitucionService.Cambio(
+                        estado, "Pedro Ramírez", null, ref, Json.sha256(ref + codigo + a.codigo), datos,
+                        "NO_APLICA".equals(estado) ? "No aplica para esta operación" : null)), Roles.OPERACIONES_GESTOR);
+            } else if (i == hasta) {
+                boolean bloqueada = rnd.nextInt(4) == 0;
+                LocalDate limite = rnd.nextBoolean() ? hoy.minusDays(2 + rnd.nextInt(10)) : null;
+                como("operaciones.pedro", () -> constitucion.actualizar(codigo, a.codigo, new ConstitucionService.Cambio(
+                        bloqueada ? "BLOQUEADA" : "EN_CURSO", "Pedro Ramírez", limite, null, null, null,
+                        bloqueada ? "Pendiente paz y salvo de impuesto predial del constituyente" : null)), Roles.OPERACIONES_GESTOR);
+            }
+        }
     }
 
     private String activar(Caso c) {

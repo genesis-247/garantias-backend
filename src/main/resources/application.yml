@@ -13,6 +13,10 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 7MB
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -57,7 +61,7 @@ logging:
 
 g360:
   cors:
-    origenes: ${G360_CORS:http://localhost:3000}
+    origenes: ${G360_CORS:http://localhost:[*]}
   kafka:
     habilitado: ${G360_KAFKA_HABILITADO:false}
     topico-flexcube: bp.flexcube.obligaciones.v1
@@ -72,5 +76,11 @@ g360:
   db:
     # true = PostgreSQL embebido para desarrollo local (sin Docker ni instalación). Ver local/iniciar.*
     embebida: ${G360_DB_EMBEBIDA:false}
+  # Carga masiva (RF-1703): límites de tamaño, filas y tiempo.
+  carga:
+    max-bytes: 5242880
+    max-filas: 5000
+    max-segundos-validacion: 120
+    max-minutos-proceso: 30
   demo:
     cargar: ${G360_DEMO_CARGAR:false}

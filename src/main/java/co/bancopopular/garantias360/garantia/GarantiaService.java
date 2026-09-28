@@ -8,6 +8,7 @@ import co.bancopopular.garantias360.comun.Json;
 import co.bancopopular.garantias360.comun.TareasPosteriores;
 import co.bancopopular.garantias360.configuracion.CampoDefinicion;
 import co.bancopopular.garantias360.configuracion.TipoGarantiaService;
+import co.bancopopular.garantias360.constitucion.ConstitucionService;
 import co.bancopopular.garantias360.eventos.OutboxService;
 import co.bancopopular.garantias360.garantia.GarantiaDtos.*;
 import co.bancopopular.garantias360.obligacion.Obligacion;
@@ -52,12 +53,14 @@ public class GarantiaService {
     private final OutboxService outbox;
     private final JdbcTemplate jdbc;
     private final TareasPosteriores posteriores;
+    private final ConstitucionService constitucion;
 
     public GarantiaService(Repositorios.Garantias garantias, Repositorios.Participantes participantes,
                            Repositorios.Vinculos vinculos, Repositorios.Valoraciones valoraciones,
                            ObligacionRepositorio obligaciones, TipoGarantiaService tipos, IdoneidadService idoneidad,
                            ResolutorReglas resolutor, CoberturaService cobertura, AuditoriaService auditoria,
-                           OutboxService outbox, JdbcTemplate jdbc, TareasPosteriores posteriores) {
+                           OutboxService outbox, JdbcTemplate jdbc, TareasPosteriores posteriores,
+                           ConstitucionService constitucion) {
         this.garantias = garantias;
         this.participantes = participantes;
         this.vinculos = vinculos;
@@ -71,6 +74,7 @@ public class GarantiaService {
         this.outbox = outbox;
         this.jdbc = jdbc;
         this.posteriores = posteriores;
+        this.constitucion = constitucion;
     }
 
     // ------------------------------------------------------------------ registro (RF-1701)
@@ -221,6 +225,9 @@ public class GarantiaService {
         g.macroestado = t.destino();
         g.updatedAt = Instant.now();
         auditoria.registrar("CAMBIAR_ESTADO", "Garantia", g.codigo, antes, instantanea(g), t.motivo());
+        if (t.destino() == Macroestado.CONSTITUCION) {
+            constitucion.generarPlan(g);
+        }
         outbox.publicar("GarantiaEstadoCambiado", "Garantia", g.codigo,
                 Map.of("garantia", g.codigo, "desde", origen.name(), "hacia", t.destino().name(),
                         "motivo", Objects.requireNonNullElse(t.motivo(), "")));
@@ -282,6 +289,14 @@ public class GarantiaService {
         if (p.fechaPerfeccionamiento().isBefore(p.fechaConstitucion())) {
             throw Errores.invalido("FECHAS_INVALIDAS", "El perfeccionamiento no puede ser anterior a la constitución", List.of());
         }
+        if (g.perfeccionada) {
+            throw Errores.conflicto("YA_PERFECCIONADA", "La garantía ya está perfeccionada");
+        }
+        // RF-0604: todas las actividades obligatorias del plan, completadas y con evidencia.
+        List<String> pendientes = constitucion.pendientesObligatorias(g.id);
+        if (!pendientes.isEmpty()) {
+            throw Errores.invalido("PLAN_INCOMPLETO", "Faltan actividades obligatorias del plan de constitución", pendientes);
+        }
         Map<String, Object> antes = instantanea(g);
         ObjectNode atributos = g.atributos.deepCopy();
         if (p.datosRegistro() != null && p.datosRegistro().isObject()) {
@@ -301,6 +316,47 @@ public class GarantiaService {
         reevaluar(g);
         auditoria.registrar("PERFECCIONAR", "Garantia", g.codigo, antes, instantanea(g), null);
         outbox.publicar("GarantiaPerfeccionada", "Garantia", g.codigo, eventoGarantia(g));
+        recalcularDespues(g.id);
+        return g;
+    }
+
+    // ------------------------------------------------------------------ actualización de datos (carga masiva, RF-1703)
+
+    /**
+     * Actualiza los atributos del tipo (solo los enviados) y los gravámenes previos de una garantía
+     * existente. Valida contra la versión del tipo de la garantía en su macroestado actual.
+     */
+    @Transactional
+    public Garantia actualizar(String codigo, JsonNode atributosParciales, BigDecimal gravamenesPrevios, String motivo) {
+        Garantia g = obtener(codigo);
+        if (g.macroestado == Macroestado.CIERRE || g.macroestado == Macroestado.ANULADA) {
+            throw Errores.conflicto("GARANTIA_CERRADA", "La garantía " + codigo + " está en " + g.macroestado + " y no se modifica");
+        }
+        var tipo = tipos.porVersion(g.tipoVersionId);
+        ObjectNode atributos = g.atributos == null ? Json.CANONICO.createObjectNode() : ((ObjectNode) g.atributos).deepCopy();
+        if (atributosParciales != null && atributosParciales.isObject()) {
+            atributos.setAll((ObjectNode) atributosParciales);
+        }
+        List<String> errores = tipos.validarAtributos(tipo.campos(), atributos, g.macroestado);
+        if (!errores.isEmpty()) {
+            throw Errores.invalido("ATRIBUTOS_INVALIDOS", "Los campos del tipo " + g.tipoCodigo + " tienen errores", errores);
+        }
+        for (CampoDefinicion c : tipo.campos()) {
+            if (c.llave() && atributos.hasNonNull(c.codigo())) {
+                String valor = atributos.get(c.codigo()).asText();
+                garantias.porLlaveNatural(g.tipoCodigo, c.codigo(), valor).filter(x -> !x.id.equals(g.id)).ifPresent(x -> {
+                    throw Errores.conflicto("GARANTIA_DUPLICADA", "Ya existe la garantía " + x.codigo + " con " + c.etiqueta() + " = " + valor);
+                });
+            }
+        }
+        Map<String, Object> antes = instantanea(g);
+        g.atributos = atributos;
+        if (gravamenesPrevios != null) {
+            g.gravamenesPrevios = gravamenesPrevios;
+        }
+        reevaluar(g);
+        auditoria.registrar("ACTUALIZAR_GARANTIA", "Garantia", g.codigo, antes, instantanea(g), motivo);
+        outbox.publicar("GarantiaActualizada", "Garantia", g.codigo, eventoGarantia(g));
         recalcularDespues(g.id);
         return g;
     }

@@ -41,6 +41,16 @@ public class GarantiaController {
         return ResponseEntity.created(URI.create("/api/v1/garantias/" + g.codigo)).body(resumen(g));
     }
 
+    @PostMapping("/captura-manual")
+    @PreAuthorize("hasAnyRole('OPERACIONES_GESTOR','OPERACIONES_DIRECTOR')")
+    @Operation(summary = "Captura manual desde la interfaz para casos excepcionales (RF-1704)",
+            description = "Mismas validaciones que la API de producto; la fuente queda como MANUAL.")
+    public ResponseEntity<Map<String, Object>> capturaManual(@Valid @RequestBody RegistroGarantia solicitud,
+                                                             @RequestHeader(value = "Idempotency-Key", required = false) String clave) {
+        Garantia g = servicio.registrar(solicitud, clave, "MANUAL");
+        return ResponseEntity.created(URI.create("/api/v1/garantias/" + g.codigo)).body(resumen(g));
+    }
+
     @GetMapping
     @PreAuthorize(Roles.LECTURA)
     @Operation(summary = "Buscar garantías con filtros")

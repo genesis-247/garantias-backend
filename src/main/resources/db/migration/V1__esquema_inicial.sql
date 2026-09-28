@@ -3,7 +3,7 @@
 
 -- ---------------------------------------------------------------------------
 -- Configuración de tipos de garantía (M16). Las versiones son inmutables una
--- vez publicadas: editar crea una versión nueva (modelo Proceder RF-03).
+-- vez publicadas: editar crea una versión nueva (RF-1601, RF-1607).
 -- ---------------------------------------------------------------------------
 create table tipo_garantia (
     id                 uuid primary key,

@@ -69,6 +69,14 @@ public final class Json {
         }
     }
 
+    public static String sha256Bytes(byte[] contenido) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(contenido));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     public static String hash(Object valor) {
         return sha256(canonico(valor));
     }

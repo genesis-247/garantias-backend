@@ -15,9 +15,17 @@ public interface TipoGarantiaRepositorio extends JpaRepository<TipoGarantia, UUI
 
     interface Versiones extends JpaRepository<TipoGarantiaVersion, UUID> {
 
-        @Query("select v from TipoGarantiaVersion v where v.tipoId = ?1 and v.estado = 'PUBLICADA' order by v.numero desc limit 1")
+        @Query("select v from TipoGarantiaVersion v where v.tipoId = ?1 and v.estado = 'PUBLICADA'")
         Optional<TipoGarantiaVersion> publicada(UUID tipoId);
 
+        @Query("select v from TipoGarantiaVersion v where v.tipoId = ?1 and v.estado in ('BORRADOR', 'EN_REVISION')")
+        Optional<TipoGarantiaVersion> enCurso(UUID tipoId);
+
+        Optional<TipoGarantiaVersion> findByTipoIdAndNumero(UUID tipoId, int numero);
+
         List<TipoGarantiaVersion> findByTipoIdOrderByNumeroDesc(UUID tipoId);
+
+        @Query("select coalesce(max(v.numero), 0) from TipoGarantiaVersion v where v.tipoId = ?1")
+        int ultimoNumero(UUID tipoId);
     }
 }

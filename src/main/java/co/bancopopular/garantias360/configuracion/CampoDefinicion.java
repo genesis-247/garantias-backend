@@ -26,7 +26,7 @@ public record CampoDefinicion(
 
     public enum TipoCampo { TEXTO, TEXTO_LARGO, NUMERO, MONEDA, FECHA, BOOLEANO, LISTA, LISTA_MULTIPLE }
 
-    /** Opción con identificador estable: se inactiva, nunca se borra (Proceder, migración 0011). */
+    /** Opción con identificador estable: se inactiva, nunca se borra (RF-1603). */
     public record Opcion(String id, String etiqueta, boolean activo) {
     }
 }

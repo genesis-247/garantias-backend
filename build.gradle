@@ -30,6 +30,9 @@ dependencies {
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
     runtimeOnly 'org.postgresql:postgresql'
 
+    // Plantillas y archivos de carga masiva en Excel (RF-1703).
+    implementation 'org.apache.poi:poi-ooxml:5.4.1'
+
     // PostgreSQL embebido para trabajar en local sin Docker ni instalación (g360.db.embebida=true).
     implementation 'io.zonky.test:embedded-postgres:2.2.2'
     implementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.15.0')

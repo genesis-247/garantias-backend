@@ -42,6 +42,31 @@ public class TareasPosteriores {
         });
     }
 
+    /**
+     * Trabajo largo (p. ej. procesar una carga masiva) que corre después del commit sin bloquear la
+     * respuesta, con el mismo usuario y Correlation ID.
+     */
+    public void enSegundoPlano(Runnable tarea) {
+        String correlation = Contexto.correlationId();
+        Runnable envuelta = new DelegatingSecurityContextRunnable(() -> Contexto.conCorrelation(correlation, () -> {
+            try {
+                tarea.run();
+            } catch (RuntimeException e) {
+                log.error("Falló una tarea en segundo plano", e);
+            }
+        }));
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            ejecutor.submit(envuelta);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                ejecutor.submit(envuelta);
+            }
+        });
+    }
+
     private void ejecutar(Runnable tarea) {
         Future<?> f = ejecutor.submit(tarea);
         try {

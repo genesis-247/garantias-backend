@@ -3,7 +3,6 @@ package co.bancopopular.garantias360.api;
 import co.bancopopular.garantias360.auditoria.AuditoriaService;
 import co.bancopopular.garantias360.comun.Contexto;
 import co.bancopopular.garantias360.comun.Errores;
-import co.bancopopular.garantias360.configuracion.TipoGarantiaService;
 import co.bancopopular.garantias360.eventos.EventosConsulta;
 import co.bancopopular.garantias360.eventos.RelayOutbox;
 import co.bancopopular.garantias360.integracion.FlexcubeService;
@@ -31,18 +30,15 @@ public class ConsultaController {
     private final EventosConsulta eventos;
     private final RelayOutbox relay;
     private final FlexcubeService flexcube;
-    private final TipoGarantiaService tipos;
 
     public ConsultaController(TableroService tablero, AlertaService alertas, AuditoriaService auditoria,
-                              EventosConsulta eventos, RelayOutbox relay, FlexcubeService flexcube,
-                              TipoGarantiaService tipos) {
+                              EventosConsulta eventos, RelayOutbox relay, FlexcubeService flexcube) {
         this.tablero = tablero;
         this.alertas = alertas;
         this.auditoria = auditoria;
         this.eventos = eventos;
         this.relay = relay;
         this.flexcube = flexcube;
-        this.tipos = tipos;
     }
 
     @GetMapping("/sesion")
@@ -64,25 +60,6 @@ public class ConsultaController {
     @Operation(summary = "Alertas del monitoreo (M10)")
     public List<AlertaService.Alerta> alertas(@RequestParam(required = false) String garantia) {
         return alertas.alertas(garantia);
-    }
-
-    @GetMapping("/tipos-garantia")
-    @PreAuthorize(Roles.LECTURA)
-    @Operation(summary = "Tipos de garantía con su versión publicada y campos")
-    public List<TipoGarantiaService.TipoConVersion> tipos() {
-        return tipos.listar();
-    }
-
-    @GetMapping("/tipos-garantia/{codigo}")
-    @PreAuthorize(Roles.LECTURA)
-    public TipoGarantiaService.TipoConVersion tipo(@PathVariable String codigo) {
-        return tipos.vigente(codigo);
-    }
-
-    @PostMapping("/tipos-garantia")
-    @PreAuthorize("hasRole('ADMIN_FUNCIONAL')")
-    public TipoGarantiaService.TipoConVersion crearTipo(@RequestBody TipoGarantiaService.NuevoTipo nuevo) {
-        return tipos.crear(nuevo);
     }
 
     @GetMapping("/auditoria")

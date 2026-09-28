@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -35,26 +36,31 @@ import java.util.regex.Pattern;
  * Seguridad (RF-2401, RF-2402). Producción: OIDC/OAuth 2.0 con Entra ID (JWT, app roles en el claim
  * "roles"). Perfiles local/demo: identidad por cabeceras X-Usuario / X-Roles para poder demostrar
  * maker–checker sin un tenant de Entra. Ese filtro NO existe fuera de esos perfiles.
+ * <p>
+ * En ambos casos, si el usuario está registrado en la administración de usuarios (M24), sus roles
+ * efectivos son los de sus perfiles activos y un usuario inactivo no entra. Si no está registrado,
+ * se usan los roles del token (o de la cabecera en local/demo).
  */
 @Configuration
 @EnableMethodSecurity
 public class SeguridadConfig {
 
-    private static final String[] PUBLICO = {"/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"};
+    // /error: sin él, cualquier error no manejado se reenvía allí y termina como un 403 sin detalle.
+    private static final String[] PUBLICO = {"/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error"};
 
     @Bean
     @Profile("!local & !demo")
-    SecurityFilterChain produccion(HttpSecurity http) throws Exception {
+    SecurityFilterChain produccion(HttpSecurity http, UsuarioService usuarios) throws Exception {
         base(http);
-        http.oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(new RolesEntraId())));
+        http.oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(new RolesEntraId(usuarios))));
         return http.build();
     }
 
     @Bean
     @Profile("local | demo")
-    SecurityFilterChain desarrollo(HttpSecurity http) throws Exception {
+    SecurityFilterChain desarrollo(HttpSecurity http, UsuarioService usuarios) throws Exception {
         base(http);
-        http.addFilterBefore(new IdentidadPorCabecera(), AnonymousAuthenticationFilter.class);
+        http.addFilterBefore(new IdentidadPorCabecera(usuarios), AnonymousAuthenticationFilter.class);
         return http.build();
     }
 
@@ -70,9 +76,10 @@ public class SeguridadConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource(@Value("${g360.cors.origenes:http://localhost:3000}") String origenes) {
+    CorsConfigurationSource corsConfigurationSource(@Value("${g360.cors.origenes:http://localhost:[*]}") String origenes) {
         CorsConfiguration c = new CorsConfiguration();
-        c.setAllowedOrigins(Arrays.asList(origenes.split(",")));
+        // Admite patrones (p. ej. http://localhost:[*] en desarrollo); en ambientes integrados G360_CORS fija el origen exacto.
+        c.setAllowedOriginPatterns(Arrays.asList(origenes.split(",")));
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
         c.setExposedHeaders(List.of("X-Correlation-ID"));
@@ -81,22 +88,46 @@ public class SeguridadConfig {
         return fuente;
     }
 
+    /** Roles efectivos: los de sus perfiles si el usuario está registrado; si no, los recibidos. */
+    static Collection<String> efectivos(UsuarioService usuarios, String usuario, Collection<String> recibidos) {
+        UsuarioService.Resolucion r = usuarios.resolver(usuario);
+        if (!r.registrado()) {
+            return recibidos;
+        }
+        if (!r.activo()) {
+            throw new DisabledException("El usuario " + usuario + " está inactivo");
+        }
+        return r.roles();
+    }
+
+    private static List<SimpleGrantedAuthority> autoridades(Collection<String> roles) {
+        return roles.stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList();
+    }
+
     /** App roles de Entra ID → ROLE_*. */
     static class RolesEntraId implements Converter<Jwt, AbstractAuthenticationToken> {
+        private final UsuarioService usuarios;
+
+        RolesEntraId(UsuarioService usuarios) {
+            this.usuarios = usuarios;
+        }
+
         @Override
         public AbstractAuthenticationToken convert(Jwt jwt) {
             Collection<String> roles = jwt.getClaimAsStringList("roles");
-            var autoridades = (roles == null ? List.<String>of() : roles).stream()
-                    .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
-                    .toList();
             String nombre = jwt.hasClaim("preferred_username") ? jwt.getClaimAsString("preferred_username") : jwt.getSubject();
-            return new JwtAuthenticationToken(jwt, autoridades, nombre);
+            return new JwtAuthenticationToken(jwt, autoridades(efectivos(usuarios, nombre, roles == null ? List.of() : roles)), nombre);
         }
     }
 
     /** Solo local/demo. */
     static class IdentidadPorCabecera extends OncePerRequestFilter {
         private static final Pattern SEGURO = Pattern.compile("^[A-Za-z0-9._@-]{1,80}$");
+        private final UsuarioService usuarios;
+
+        IdentidadPorCabecera(UsuarioService usuarios) {
+            this.usuarios = usuarios;
+        }
 
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -107,13 +138,21 @@ public class SeguridadConfig {
                 usuario = "demo.consultor";
                 roles = Roles.CONSULTOR;
             }
-            var autoridades = Arrays.stream(roles == null ? new String[0] : roles.split(","))
+            List<String> recibidos = Arrays.stream(roles == null ? new String[0] : roles.split(","))
                     .map(String::trim)
                     .filter(r -> SEGURO.matcher(r).matches())
-                    .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
                     .toList();
+            Collection<String> efectivos;
+            try {
+                efectivos = efectivos(usuarios, usuario, recibidos);
+            } catch (DisabledException e) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("application/problem+json;charset=UTF-8");
+                response.getWriter().write("{\"status\":403,\"codigo\":\"USUARIO_INACTIVO\",\"detail\":\"El usuario está inactivo\",\"detalles\":[]}");
+                return;
+            }
             SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(usuario, "n/a", autoridades));
+                    new UsernamePasswordAuthenticationToken(usuario, "n/a", autoridades(efectivos)));
             chain.doFilter(request, response);
         }
     }
